@@ -49,7 +49,6 @@ public:
 
     SmartVectorPath *objectToVectorPathBox();
     SmartVectorPath *strokeToVectorPathBox();
-    SculptPathBox* objectToSculptPathBox();
 
     bool relPointInsidePath(const QPointF &relPos) const;
 
@@ -88,6 +87,7 @@ public:
     void duplicatePaintSettingsFrom(FillSettingsAnimator * const fillSettings,
                                     OutlineSettingsAnimator * const strokeSettings);
 
+    SkPath getParentCoordinatesPath(const qreal relFrame) const;
     SkPath getAbsolutePath(const qreal relFrame) const;
     SkPath getAbsolutePath() const;
     const SkPath &getRelativePath() const;
@@ -99,20 +99,9 @@ public:
     bool differenceInOutlinePathBetweenFrames(
             const int frame1, const int frame2) const;
 
-    void setPathsOutdated(const UpdateReason reason) {
-        mCurrentPathsOutdated = true;
-        planUpdate(reason);
-    }
-
-    void setOutlinePathOutdated(const UpdateReason reason) {
-        mCurrentOutlinePathOutdated = true;
-        planUpdate(reason);
-    }
-
-    void setFillPathOutdated(const UpdateReason reason) {
-        mCurrentFillPathOutdated = true;
-        planUpdate(reason);
-    }
+    void setPathsOutdated(const UpdateReason reason);
+    void setOutlinePathOutdated(const UpdateReason reason);
+    void setFillPathOutdated(const UpdateReason reason);
 
     void savePathBoxSVG(SvgExporter& exp, QDomElement& ele,
                         const FrameRange& visRange) const;

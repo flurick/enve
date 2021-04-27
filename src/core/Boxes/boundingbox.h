@@ -26,6 +26,7 @@
 #include "MovablePoints/segment.h"
 #include "Animators/qcubicsegment1danimator.h"
 #include "BlendEffects/blendeffect.h"
+#include "TransformEffects/transformeffect.h"
 #include "Tasks/domeletask.h"
 
 class Canvas;
@@ -44,10 +45,10 @@ class BoxTransformAnimator;
 class BasicTransformAnimator;
 class CustomProperties;
 class BlendEffectCollection;
+class TransformEffectCollection;
 
 class ContainerBox;
 class SmartVectorPath;
-class SculptPathBox;
 class DurationRectangle;
 struct ContainerBoxRenderData;
 class ShaderEffect;
@@ -74,7 +75,8 @@ enum class eBoxType {
     paint,
     group,
     custom,
-    sculptPath,
+    deprecated0, // sculptPath,
+    nullObject,
 
     count
 };
@@ -97,11 +99,6 @@ public:
 
     static BoundingBox *sGetBoxByDocumentId(const int documentId);
 
-    static void sAddReadBox(BoundingBox * const box);
-    static BoundingBox *sGetBoxByReadId(const int readId);
-    static void sClearReadBoxes();
-    static void sForEveryReadBox(const std::function<void(BoundingBox*)>& func);
-
     static void sClearWriteBoxes();
 
     template <typename B, typename T>
@@ -109,8 +106,6 @@ public:
 private:
     static int sNextDocumentId;
     static QList<BoundingBox*> sDocumentBoxes;
-
-    static QList<BoundingBox*> sReadBoxes;
 
     static int sNextWriteId;
     static QList<const BoundingBox*> sBoxesWithWriteIds;
@@ -128,8 +123,6 @@ public:
     virtual SmartVectorPath *objectToVectorPathBox()
     { return nullptr; }
     virtual SmartVectorPath *strokeToVectorPathBox()
-    { return nullptr;}
-    virtual SculptPathBox *objectToSculptPathBox()
     { return nullptr; }
 
     void centerPivotPositionAction();
@@ -184,10 +177,10 @@ public:
 
     virtual void updateAllBoxes(const UpdateReason reason);
 
-    virtual QMatrix getRelativeTransformAtCurrentFrame();
-    virtual QMatrix getRelativeTransformAtFrame(const qreal relFrame);
-    virtual QMatrix getInheritedTransformAtFrame(const qreal relFrame);
-    virtual QMatrix getTotalTransformAtFrame(const qreal relFrame);
+    virtual QMatrix getRelativeTransformAtCurrentFrame() const;
+    virtual QMatrix getRelativeTransformAtFrame(const qreal relFrame) const;
+    virtual QMatrix getInheritedTransformAtFrame(const qreal relFrame) const;
+    virtual QMatrix getTotalTransformAtFrame(const qreal relFrame) const;
     virtual QPointF mapAbsPosToRel(const QPointF &absPos);
 
     virtual void applyPaintSetting(const PaintSettingsApplier &setting);
@@ -226,6 +219,8 @@ public:
 
     virtual SkBlendMode getBlendMode() const
     { return mBlendMode; }
+
+    virtual qreal getOpacity(const qreal relFrame) const;
 
     virtual void saveSVG(SvgExporter& exp, DomEleTask* const task) const {
         Q_UNUSED(exp)
@@ -310,15 +305,15 @@ public:
     void clearWriteId() const;
     int getWriteId() const;
 
-    int getReadId() const;
-    void clearReadId() const;
-
     void clearParent();
     void setParentTransform(BasicTransformAnimator *parent);
 
     bool isContainedIn(const QRectF &absRect) const;
 
+    QPointF getPivotRelPos(const qreal relFrame);
     QPointF getPivotAbsPos();
+    QPointF getPivotAbsPos(const qreal relFrame);
+
     QPointF getAbsolutePos() const;
     bool absPointInsidePath(const QPointF &absPos);
 
@@ -413,6 +408,16 @@ public:
     bool hasEnabledBlendEffects() const
     { return blendEffectsEnabled() && hasBlendEffects(); }
 
+    void applyTransformEffects(const qreal relFrame,
+                               qreal& pivotX, qreal& pivotY,
+                               qreal& posX, qreal& posY,
+                               qreal& rot,
+                               qreal& scaleX, qreal& scaleY,
+                               qreal& shearX, qreal& shearY,
+                               QMatrix& postTransform);
+
+    bool hasTransformEffects() const;
+
     ContainerBox* getFirstParentLayer() const;
 
     eTask* saveSVGWithTransform(SvgExporter& exp, QDomElement& parent,
@@ -444,6 +449,7 @@ protected:
 
     const qsptr<CustomProperties> mCustomProperties;
     const qsptr<BlendEffectCollection> mBlendEffectCollection;
+    const qsptr<TransformEffectCollection> mTransformEffectCollection;
     const qsptr<BoxTransformAnimator> mTransformAnimator;
     const qsptr<RasterEffectCollection> mRasterEffectsAnimators;
 private:
@@ -453,10 +459,10 @@ private:
 
     void setCustomPropertiesVisible(const bool visible);
     void setBlendEffectsVisible(const bool visible);
+    void setTransformEffectsVisible(const bool visible);
 
     SkBlendMode mBlendMode = SkBlendMode::kSrcOver;
 
-    mutable int mReadId = -1;
     mutable int mWriteId = -1;
 
     bool mVisibleInScene = true;

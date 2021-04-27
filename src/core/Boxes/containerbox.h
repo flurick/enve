@@ -123,9 +123,15 @@ public:
     void writeBoxOrSoundXEV(const stdsptr<XevZipFileSaver>& xevFileSaver,
                             const RuntimeIdToWriteId& objListIdConv,
                             const QString& path) const;
-    void readBoxOrSoundXEV(ZipFileLoader& fileLoader, const QString& path,
+    void readBoxOrSoundXEV(XevReadBoxesHandler& boxReadHandler,
+                           ZipFileLoader& fileLoader, const QString& path,
                            const RuntimeIdToWriteId& objListIdConv);
-    void readAllContainedXEV(ZipFileLoader& fileLoader, const QString& path,
+
+    virtual bool isFlipBook() const;
+    virtual iValueRange getContainedMinMax() const;
+
+    void readAllContainedXEV(XevReadBoxesHandler& boxReadHandler,
+                             ZipFileLoader& fileLoader, const QString& path,
                              const RuntimeIdToWriteId& objListIdConv);
 
     void queChildrenTasks();
@@ -164,8 +170,6 @@ public:
     void ungroupAbandomTransform_k();
 
     bool isCurrentGroup() const;
-    bool isFlipBook() const;
-    FlipBookProperty* flipBook() const;
 
     void updateContainedBoxes();
     bool replaceContained(const qsptr<eBoxOrSound>& replaced,
@@ -235,8 +239,6 @@ public:
             QList<BlendEffect::Delayed> &delayed) const;
 
     void updateIfUsesProgram(const ShaderEffectProgram * const program) const final;
-
-    iValueRange getContainedMinMax() const;
 protected:
     void saveBoxesSVG(SvgExporter& exp,
                       DomEleTask* const eleTask,
@@ -253,15 +255,19 @@ private:
             int& drawId, QList<BlendEffect::UIDelayed> &delayed);
     void updateUIElementsForBlendEffects(
             int& drawId, QList<BlendEffect::UIDelayed> &delayed);
+    using PathUpdater = void (PathBox::*)(const UpdateReason);
 signals:
     void switchedGroupLayer(const eBoxType type);
     void insertedObject(const int id, eBoxOrSound* const obj);
     void removedObject(const int id, eBoxOrSound* const obj);
     void movedObject(const int from, const int to,
                      eBoxOrSound* const obj);
-private:
+    void childPathsUpdated(const UpdateReason reason,
+                           const PathUpdater func);
+protected:
     void updateAllChildPaths(const UpdateReason reason,
-                             void (PathBox::*func)(const UpdateReason));
+                             const PathUpdater func);
+private:
     void iniPathEffects();
     void updateRelBoundingRect();
     void removeContained(const qsptr<eBoxOrSound> &child);

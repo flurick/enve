@@ -458,7 +458,7 @@ void KeysView::paintEvent(QPaintEvent *) {
     else p.fillRect(rect(), QColor(60, 60, 60));
 
     if(mPixelsPerFrame < 0.001) return;
-    if(!mGraphViewed) {    
+    if(!mGraphViewed) {
         int currY = eSizesUI::widget;
         p.setPen(QPen(QColor(40, 40, 40), 1));
         while(currY < height()) {
@@ -515,7 +515,7 @@ void KeysView::paintEvent(QPaintEvent *) {
         drawKeys(&p, mPixelsPerFrame, viewedFrameRange);
         p.restore();
         if(mSelecting) {
-            p.setPen(QPen(Qt::blue, 2, Qt::DotLine));
+            p.setPen(QPen(Qt::white, 1.5, Qt::DotLine));
             p.setBrush(Qt::NoBrush);
             p.drawRect(QRectF((mSelectionRect.x() - mMinViewedFrame)*mPixelsPerFrame,
                               mSelectionRect.y() - mViewedTop,
@@ -758,12 +758,12 @@ void KeysView::handleMouseMove(const QPoint &pos,
             if(mFirstMove) {
                 if(mLastPressedMovable) {
                     const bool shiftPressed = QApplication::keyboardModifiers() & Qt::SHIFT;
-                    if(const auto dur = enve_cast<DurationRectangle*>(mLastPressedMovable)) {
-                        if(!dur->isSelected()) dur->selectionChangeTriggered(shiftPressed);
+                    if(!mLastPressedMovable->isSelected()) {
+                        mLastPressedMovable->selectionChangeTriggered(shiftPressed);
                     }
                     const auto childProp = mLastPressedMovable->getParentProperty();
-                    mMoveAllSelected = shiftPressed &&
-                            enve_cast<eBoxOrSound*>(childProp);
+                    mMoveAllSelected = true;
+                    // mMoveAllSelected = shiftPressed && enve_cast<eBoxOrSound*>(childProp);
                     if(mMoveAllSelected) {
                         if(mLastPressedMovable->isDurationRect()) {
                             mCurrentScene->startDurationRectPosTransformForAllSelected();
@@ -872,8 +872,8 @@ void KeysView::mouseReleaseEvent(QMouseEvent *e) {
                 }
             } else if(mMovingRect) {
                 if(mFirstMove) {
-                    if(const auto dur = enve_cast<DurationRectangle*>(mLastPressedMovable)) {
-                        dur->selectionChangeTriggered(shiftPressed);
+                    if(mLastPressedMovable) {
+                        mLastPressedMovable->selectionChangeTriggered(shiftPressed);
                     }
                 } else {
                     const auto childProp = mLastPressedMovable->getParentProperty();

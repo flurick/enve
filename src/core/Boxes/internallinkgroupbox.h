@@ -47,6 +47,16 @@ public:
                          BoxRenderData * const data,
                          Canvas * const scene);
 
+    bool localDifferenceInPathBetweenFrames(
+            const int frame1, const int frame2) const;
+    bool localDifferenceInOutlinePathBetweenFrames(
+            const int frame1, const int frame2) const;
+    bool localDifferenceInFillPathBetweenFrames(
+            const int frame1, const int frame2) const;
+
+    bool isFlipBook() const;
+    iValueRange getContainedMinMax() const;
+
     void setLinkTarget(ContainerBox * const linkTarget);
 protected:
     const qsptr<BoxTargetProperty> mBoxTarget =

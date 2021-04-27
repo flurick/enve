@@ -45,15 +45,10 @@ DEFINES += QT_DEPRECATED_WARNINGS
 include(core.pri)
 
 SOURCES += \
+    Boxes/nullobject.cpp \
     Expressions/expression.cpp \
     Expressions/framebinding.cpp \
     Expressions/propertybinding.cpp \
-    Animators/SculptPath/sculptbrush.cpp \
-    Animators/SculptPath/sculptnode.cpp \
-    Animators/SculptPath/sculptnodebase.cpp \
-    Animators/SculptPath/sculptpath.cpp \
-    Animators/SculptPath/sculptpathanimator.cpp \
-    Animators/SculptPath/sculptpathcollection.cpp \
     Animators/SmartPath/listofnodes.cpp \
     Animators/SmartPath/smartpath.cpp \
     Animators/SmartPath/smartpathanimatoractions.cpp \
@@ -108,8 +103,6 @@ SOURCES += \
     Boxes/patheffectsmenu.cpp \
     Boxes/rectangle.cpp \
     Boxes/renderdatahandler.cpp \
-    Boxes/sculptpathbox.cpp \
-    Boxes/sculptpathboxrenderdata.cpp \
     Boxes/smartvectorpath.cpp \
     Boxes/svglinkbox.cpp \
     Boxes/textbox.cpp \
@@ -210,10 +203,13 @@ SOURCES += \
     RasterEffects/OilImpl/oilsimulator.cpp \
     RasterEffects/OilImpl/oiltrace.cpp \
     RasterEffects/blureffect.cpp \
+    RasterEffects/brightnesscontrasteffect.cpp \
+    RasterEffects/colorizeeffect.cpp \
     RasterEffects/customrastereffect.cpp \
     RasterEffects/motionblureffect.cpp \
     RasterEffects/noisefadeeffect.cpp \
     RasterEffects/oileffect.cpp \
+    RasterEffects/openglrastereffectcaller.cpp \
     RasterEffects/rastereffect.cpp \
     RasterEffects/rastereffectcaller.cpp \
     RasterEffects/rastereffectcollection.cpp \
@@ -248,6 +244,15 @@ SOURCES += \
     Timeline/animationrect.cpp \
     Timeline/durationrectangle.cpp \
     Timeline/fixedlenanimationrect.cpp \
+    TransformEffects/followobjecteffect.cpp \
+    TransformEffects/followobjecteffectbase.cpp \
+    TransformEffects/followobjectrelativeeffect.cpp \
+    TransformEffects/followpatheffect.cpp \
+    TransformEffects/parenteffect.cpp \
+    TransformEffects/targettransformeffect.cpp \
+    TransformEffects/trackeffect.cpp \
+    TransformEffects/transformeffect.cpp \
+    TransformEffects/transformeffectcollection.cpp \
     XML/xevexporter.cpp \
     XML/xevimporter.cpp \
     XML/xevzipfilesaver.cpp \
@@ -267,6 +272,7 @@ SOURCES += \
     cpurendertools.cpp \
     customidentifier.cpp \
     drawpath.cpp \
+    eevent.cpp \
     efiltersettings.cpp \
     etexture.cpp \
     etextureframebuffer.cpp \
@@ -360,15 +366,10 @@ SOURCES += \
     zipfilesaver.cpp
 
 HEADERS += \
+    Boxes/nullobject.h \
     Expressions/expression.h \
     Expressions/framebinding.h \
     Expressions/propertybinding.h \
-    Animators/SculptPath/sculptbrush.h \
-    Animators/SculptPath/sculptnode.h \
-    Animators/SculptPath/sculptnodebase.h \
-    Animators/SculptPath/sculptpath.h \
-    Animators/SculptPath/sculptpathanimator.h \
-    Animators/SculptPath/sculptpathcollection.h \
     Animators/SmartPath/listofnodes.h \
     Animators/SmartPath/smartpath.h \
     Animators/brushsettingsanimator.h \
@@ -427,8 +428,6 @@ HEADERS += \
     Boxes/patheffectsmenu.h \
     Boxes/rectangle.h \
     Boxes/renderdatahandler.h \
-    Boxes/sculptpathbox.h \
-    Boxes/sculptpathboxrenderdata.h \
     Boxes/smartvectorpath.h \
     Boxes/svglinkbox.h \
     Boxes/textbox.h \
@@ -528,6 +527,7 @@ HEADERS += \
     Properties/boxtargetproperty.h \
     Properties/emimedata.h \
     Properties/namedproperty.h \
+    Properties/newproperty.h \
     RasterEffects/OilImpl/oilPaint.h \
     RasterEffects/OilImpl/oilbristle.h \
     RasterEffects/OilImpl/oilbrush.h \
@@ -535,10 +535,13 @@ HEADERS += \
     RasterEffects/OilImpl/oilsimulator.h \
     RasterEffects/OilImpl/oiltrace.h \
     RasterEffects/blureffect.h \
+    RasterEffects/brightnesscontrasteffect.h \
+    RasterEffects/colorizeeffect.h \
     RasterEffects/customrastereffect.h \
     RasterEffects/motionblureffect.h \
     RasterEffects/noisefadeeffect.h \
     RasterEffects/oileffect.h \
+    RasterEffects/openglrastereffectcaller.h \
     RasterEffects/rastereffect.h \
     RasterEffects/customrastereffectcreator.h \
     RasterEffects/rastereffectcaller.h \
@@ -583,6 +586,15 @@ HEADERS += \
     Timeline/animationrect.h \
     Timeline/durationrectangle.h \
     Timeline/fixedlenanimationrect.h \
+    TransformEffects/followobjecteffect.h \
+    TransformEffects/followobjecteffectbase.h \
+    TransformEffects/followobjectrelativeeffect.h \
+    TransformEffects/followpatheffect.h \
+    TransformEffects/parenteffect.h \
+    TransformEffects/targettransformeffect.h \
+    TransformEffects/trackeffect.h \
+    TransformEffects/transformeffect.h \
+    TransformEffects/transformeffectcollection.h \
     XML/runtimewriteid.h \
     XML/xevexporter.h \
     XML/xevimporter.h \
@@ -602,6 +614,7 @@ HEADERS += \
     customhandler.h \
     customidentifier.h \
     drawpath.h \
+    eevent.h \
     efiltersettings.h \
     etexture.h \
     etextureframebuffer.h \
@@ -713,5 +726,7 @@ RESOURCES += \
     coreresources.qrc
 
 DISTFILES += \
+    RasterEffects/brightnesscontrasteffect.frag \
+    RasterEffects/colorizeeffect.frag \
     RasterEffects/noisefadeeffect.frag \
     RasterEffects/wipeeffect.frag

@@ -18,15 +18,24 @@
 
 #include "etask.h"
 
+#include "GUI/dialogsinterface.h"
+
 void eTaskBase::finishedProcessing() {
     mState = eTaskState::finished;
     if(mCancel) {
         mCancel = false;
         cancel();
     } else if(unhandledException()) {
-        handleException();
-        if(unhandledException()) {
-            gPrintExceptionCritical(takeException());
+        const bool handled = handleException();
+        if(!handled) {
+            const auto ePtr = takeException();
+//            try {
+//                if(ePtr) std::rethrow_exception(ePtr);
+//            } catch(const std::exception& e) {
+//                const auto& inst = DialogsInterface::instance();
+//                inst.showStatusMessage(e.what());
+//            }
+            gPrintExceptionCritical(ePtr);
             cancel();
         }
     } else {
@@ -36,6 +45,7 @@ void eTaskBase::finishedProcessing() {
 }
 
 void eTaskBase::addDependent(eTask * const task) {
+    Q_ASSERT(task != this);
     if(!task) return;
     if(mState == eTaskState::finished) {
         return;
@@ -64,6 +74,17 @@ void eTaskBase::cancel() {
     mState = eTaskState::canceled;
     cancelDependent();
     afterCanceled();
+}
+
+void eTaskBase::moveDependent(eTaskBase* const to) {
+    for(const auto& dependent : mDependent) {
+        to->mDependent << dependent;
+    }
+    mDependent.clear();
+    for(const auto& dependent : mDependentF) {
+        to->mDependentF << dependent;
+    }
+    mDependentF.clear();
 }
 
 void eTaskBase::setException(const std::exception_ptr& exception) {

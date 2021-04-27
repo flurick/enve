@@ -99,19 +99,21 @@ void VideoBox::writeBoundingBox(eWriteStream& dst) const {
 void VideoBox::readBoundingBox(eReadStream& src) {
     AnimationBox::readBoundingBox(src);
     const QString path = src.readFilePath();
-    setFilePath(path);
+    setFilePathNoRename(path);
 }
 
 QDomElement VideoBox::prp_writePropertyXEV_impl(const XevExporter& exp) const {
     auto result = AnimationBox::prp_writePropertyXEV_impl(exp);
-    result.setAttribute("src", mFileHandler.path());
+    const QString& absSrc = mFileHandler.path();
+    XevExportHelpers::setAbsAndRelFileSrc(absSrc, result, exp);
     return result;
 }
 
-void VideoBox::prp_readPropertyXEV_impl(const QDomElement& ele, const XevImporter& imp) {
+void VideoBox::prp_readPropertyXEV_impl(const QDomElement& ele,
+                                        const XevImporter& imp) {
     AnimationBox::prp_readPropertyXEV_impl(ele, imp);
-    const auto src = ele.attribute("src");
-    setFilePath(src);
+    const QString absSrc = XevExportHelpers::getAbsAndRelFileSrc(ele, imp);
+    setFilePathNoRename(absSrc);
 }
 
 #include "GUI/edialogs.h"
@@ -127,8 +129,13 @@ void VideoBox::setStretch(const qreal stretch) {
     mSound->setStretch(stretch);
 }
 
-void VideoBox::setFilePath(const QString &path) {
+void VideoBox::setFilePathNoRename(const QString &path) {
     mFileHandler.assign(path);
+}
+
+void VideoBox::setFilePath(const QString &path) {
+    setFilePathNoRename(path);
+    rename(QFileInfo(path).completeBaseName());
 }
 
 QString VideoBox::getFilePath() {

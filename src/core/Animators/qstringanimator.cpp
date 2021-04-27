@@ -24,9 +24,20 @@ QStringAnimator::QStringAnimator(const QString &name) :
     SteppedAnimator<QString>(name) {}
 
 QDomElement createTextElement(SvgExporter& exp, const QString& text) {
-    auto ele = exp.createElement("text");
-    ele.appendChild(exp.createTextNode(text));
-    return ele;
+    auto textEle = exp.createElement("text");
+
+    const QStringList lines = text.split(QRegExp("\n|\r\n|\r"));
+    for(int i = 0; i < lines.count(); i++) {
+        const auto& line = lines.at(i);
+        auto tspan = exp.createElement("tspan");
+        if(i != 0) tspan.setAttribute("dy", "1.2em");
+        tspan.setAttribute("x", 0);
+        const auto textNode = exp.createTextNode(line);
+        tspan.appendChild(textNode);
+        textEle.appendChild(tspan);
+    }
+
+    return textEle;
 }
 
 void QStringAnimator::saveSVG(SvgExporter& exp, QDomElement& parent,
@@ -56,14 +67,53 @@ void QStringAnimator::saveSVG(SvgExporter& exp, QDomElement& parent,
 
 void QStringAnimator::prp_readPropertyXEV_impl(
         const QDomElement& ele, const XevImporter& imp) {
-    Q_UNUSED(imp)
-    readValuesXEV(ele, [](QString& str, const QStringRef& strRef) {
-        str = strRef.toString();
-    });
+    if(ele.hasAttribute("frames")) {
+        const auto framesStr = ele.attribute("frames");
+        const auto frameStrs = framesStr.splitRef(' ', QString::SkipEmptyParts);
+
+        for(const QStringRef& frame : frameStrs) {
+            const int iFrame = XmlExportHelpers::stringToInt(frame);
+            imp.processAsset(frame + ".txt", [&](QIODevice* const src) {
+                QString value;
+                QTextStream stream(src);
+                value = stream.readAll();
+                const auto key = enve::make_shared<QStringKey>(value, iFrame, this);
+                anim_appendKey(key);
+            });
+        }
+    } else {
+        imp.processAsset("value.txt", [&](QIODevice* const src) {
+            QString value;
+            QTextStream stream(src);
+            value = stream.readAll();
+            setCurrentValue(value);
+        });
+    }
+}
+
+void saveTextXEV(const QString& path, const XevExporter& exp,
+                 const QString& txt) {
+    exp.processAsset(path, [&](QIODevice* const dst) {
+        QTextStream stream(dst);
+        stream << txt;
+    }, false);
 }
 
 QDomElement QStringAnimator::prp_writePropertyXEV_impl(const XevExporter& exp) const {
     auto result = exp.createElement("Text");
-    writeValuesXEV(result, [](const QString& str) { return str; });
+    if(anim_hasKeys()) {
+        QString frames;
+        for(const auto& key : anim_getKeys()) {
+            const auto txtKey = static_cast<QStringKey*>(key);
+            const auto frameStr = QString::number(key->getRelFrame());
+            if(!frames.isEmpty()) frames += ' ';
+            frames += frameStr;
+            saveTextXEV(frameStr + ".txt", exp, txtKey->getValue());
+        }
+        result.setAttribute("frames", frames);
+    } else {
+        saveTextXEV("value.txt", exp, getCurrentValue());
+    }
+
     return result;
 }

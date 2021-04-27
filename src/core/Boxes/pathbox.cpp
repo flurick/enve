@@ -16,7 +16,6 @@
 
 #include "Boxes/pathbox.h"
 
-#include "Boxes/sculptpathbox.h"
 #include "MovablePoints/gradientpoint.h"
 #include "Animators/gradientpoints.h"
 #include "skia/skiaincludes.h"
@@ -298,6 +297,21 @@ bool PathBox::differenceInOutlinePathBetweenFrames(const int frame1, const int f
     return BoxWithPathEffects::differenceInOutlinePathBetweenFrames(frame1, frame2);
 }
 
+void PathBox::setPathsOutdated(const UpdateReason reason) {
+    mCurrentPathsOutdated = true;
+    planUpdate(reason);
+}
+
+void PathBox::setOutlinePathOutdated(const UpdateReason reason) {
+    mCurrentOutlinePathOutdated = true;
+    planUpdate(reason);
+}
+
+void PathBox::setFillPathOutdated(const UpdateReason reason) {
+    mCurrentFillPathOutdated = true;
+    planUpdate(reason);
+}
+
 void PathBox::saveFillSettingsSVG(SvgExporter& exp, QDomElement& ele,
                                   const FrameRange& visRange) const {
     mFillSettings->saveSVG(exp, ele, visRange);
@@ -333,19 +347,17 @@ SmartVectorPath *PathBox::strokeToVectorPathBox() {
     return newPath.get();
 }
 
-SculptPathBox *PathBox::objectToSculptPathBox() {
-    const auto newPath = enve::make_shared<SculptPathBox>();
-    newPath->setPath(mEditPathSk);
-    PropertyClipboard::sCopyAndPaste(mFillSettings.get(),
-                                     newPath->getFillSettings());
-    copyBoundingBoxDataTo(newPath.get());
-    getParentGroup()->addContained(newPath);
-    return newPath.get();
+
+SkPath PathBox::getParentCoordinatesPath(const qreal relFrame) const {
+    SkPath result;
+    const auto transform = toSkMatrix(getRelativeTransformAtFrame(relFrame));
+    getRelativePath(relFrame).transform(transform, &result);
+    return result;
 }
 
 SkPath PathBox::getAbsolutePath(const qreal relFrame) const {
     SkPath result;
-    const auto transform = toSkMatrix(getTotalTransform());
+    const auto transform = toSkMatrix(getTotalTransformAtFrame(relFrame));
     getRelativePath(relFrame).transform(transform, &result);
     return result;
 }

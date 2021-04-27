@@ -28,8 +28,9 @@ Property::Property(const QString& name) :
     connect(this, &Property::prp_ancestorChanged, this, [this]() {
         const auto newScene = mParent_k ? mParent_k->mParentScene : nullptr;
         if(mParentScene != newScene) {
+            const auto old = mParentScene;
             mParentScene = newScene;
-            emit prp_sceneChanged();
+            emit prp_sceneChanged(old, newScene);
         }
         emit prp_pathChanged();
     });
@@ -78,6 +79,27 @@ void Property::prp_readProperty(eReadStream& src) {
 void Property::prp_writeProperty(eWriteStream& dst) const {
     prp_writeProperty_impl(dst);
     SWT_writeAbstraction(dst);
+}
+
+QString Property::prp_tagNameXEV() const {
+    const QString& name = prp_getName();
+    QString result;
+    result.reserve(name.length());
+    bool upper = true;
+    for(int i = 0; i < name.length(); i++) {
+        auto c = name[i];
+        if(c == ' ') {
+            upper = true;
+            continue;
+        }
+        if(upper) {
+            result.append(c.toUpper());
+            upper = false;
+        } else {
+            result.append(c);
+        }
+    }
+    return result;
 }
 
 QDomElement Property::prp_writePropertyXEV(const XevExporter& exp) const {
@@ -150,6 +172,12 @@ BasicTransformAnimator *Property::getTransformAnimator() const {
 QMatrix Property::getTransform() const {
     const auto trans = getTransformAnimator();
     if(trans) return trans->getTotalTransform();
+    return QMatrix();
+
+}
+QMatrix Property::getTransform(const qreal relFrame) const {
+    const auto trans = getTransformAnimator();
+    if(trans) return trans->getTotalTransformAtFrame(relFrame);
     return QMatrix();
 }
 

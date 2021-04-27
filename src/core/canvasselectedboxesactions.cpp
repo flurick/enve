@@ -20,6 +20,7 @@
 #include "Boxes/smartvectorpath.h"
 #include "Animators/SmartPath/smartpathcollection.h"
 #include "Private/document.h"
+#include "eevent.h"
 
 void Canvas::groupSelectedBoxes() {
     if(mSelectedBoxes.isEmpty()) return;
@@ -141,11 +142,6 @@ void Canvas::convertSelectedPathStrokesToPath() {
     }
 }
 
-void Canvas::convertSelectedBoxesToSculptedPath() {
-    for(const auto &box : mSelectedBoxes)
-        box->objectToSculptPathBox();
-}
-
 void Canvas::setSelectedTextAlignment(const Qt::Alignment alignment) const {
     pushUndoRedoName("Change Text Alignment");
     for(const auto &box : mSelectedBoxes) {
@@ -262,7 +258,7 @@ void Canvas::startSelectedFillColorTransform() {
 }
 
 #include "Boxes/smartvectorpath.h"
-NormalSegment Canvas::getSegment(const MouseEvent& e) const {
+NormalSegment Canvas::getSegment(const eMouseEvent& e) const {
     const qreal zoomInv = 1/e.fScale;
     for(const auto &box : mSelectedBoxes) {
         const auto pathEdge = box->getNormalSegment(e.fPos, zoomInv);
@@ -611,12 +607,49 @@ SmartVectorPath *Canvas::getPathResultingFromOperation(const SkPathOp& pathOp) {
     }
     SkPath resultPath;
     builder.resolve(&resultPath);
-    newPath->loadSkPath(resultPath);
+    if(resultPath.isEmpty()) {
+        return getPathResultingFromCombine();
+    } else {
+        newPath->loadSkPath(resultPath);
+    }
     mCurrentContainer->addContained(newPath);
     return newPath.get();
 }
 
+SmartVectorPath *Canvas::getPathResultingFromCombine() {
+    SmartVectorPath *newPath = nullptr;
+    for(const auto &box : mSelectedBoxes) {
+        if(const auto path = enve_cast<SmartVectorPath*>(box)) {
+            newPath = path;
+            break;
+        }
+    }
+    if(!newPath) {
+        const auto newPathT = enve::make_shared<SmartVectorPath>();
+        newPathT->planCenterPivotPosition();
+        mCurrentContainer->addContained(newPathT);
+        newPath = newPathT.get();
+    }
+
+    const auto targetVP = newPath->getPathAnimator();
+    const QMatrix firstTranf = newPath->getTotalTransform();
+    for(const auto &box : mSelectedBoxes) {
+        if(box == newPath) continue;
+        if(const auto boxPath = enve_cast<SmartVectorPath*>(box)) {
+            const QMatrix relTransf = boxPath->getTotalTransform()*
+                    firstTranf.inverted();
+            const auto srcVP = boxPath->getPathAnimator();
+            srcVP->applyTransform(relTransf);
+            targetVP->moveAllFrom(srcVP);
+            box->removeFromParent_k();
+        }
+    }
+    return newPath;
+}
+
 void Canvas::selectedPathsDifference() {
+    if(mSelectedBoxes.isEmpty()) return;
+
     SmartVectorPath * const newPath = getPathResultingFromOperation(
                 SkPathOp::kDifference_SkPathOp);
 
@@ -625,6 +658,8 @@ void Canvas::selectedPathsDifference() {
 }
 
 void Canvas::selectedPathsIntersection() {
+    if(mSelectedBoxes.isEmpty()) return;
+
     SmartVectorPath * const newPath = getPathResultingFromOperation(
                 SkPathOp::kIntersect_SkPathOp);
 
@@ -633,6 +668,8 @@ void Canvas::selectedPathsIntersection() {
 }
 
 void Canvas::selectedPathsDivision() {
+    if(mSelectedBoxes.isEmpty()) return;
+
     SmartVectorPath * const newPath1 = getPathResultingFromOperation(
                 SkPathOp::kDifference_SkPathOp);
 
@@ -645,6 +682,8 @@ void Canvas::selectedPathsDivision() {
 }
 
 void Canvas::selectedPathsExclusion() {
+    if(mSelectedBoxes.isEmpty()) return;
+
     SmartVectorPath * const newPath1 = getPathResultingFromOperation(
                 SkPathOp::kDifference_SkPathOp);
     SmartVectorPath * const newPath2 = getPathResultingFromOperation(
@@ -658,6 +697,7 @@ void Canvas::selectedPathsExclusion() {
 
 void Canvas::selectedPathsBreakApart() {
     if(mSelectedBoxes.isEmpty()) return;
+
     QList<qsptr<SmartVectorPath>> created;
     for(const auto &box : mSelectedBoxes) {
         if(const auto path = enve_cast<SmartVectorPath*>(box)) {
@@ -671,6 +711,8 @@ void Canvas::selectedPathsBreakApart() {
 }
 
 void Canvas::selectedPathsUnion() {
+    if(mSelectedBoxes.isEmpty()) return;
+
     SmartVectorPath * const newPath = getPathResultingFromOperation(
                 SkPathOp::kUnion_SkPathOp);
 
@@ -680,33 +722,11 @@ void Canvas::selectedPathsUnion() {
 
 void Canvas::selectedPathsCombine() {
     if(mSelectedBoxes.isEmpty()) return;
-    SmartVectorPath *firstVectorPath = nullptr;
-    for(const auto &box : mSelectedBoxes) {
-        if(const auto path = enve_cast<SmartVectorPath*>(box)) {
-            firstVectorPath = path;
-            break;
-        }
-    }
-    if(!firstVectorPath) {
-        const auto newPath = enve::make_shared<SmartVectorPath>();
-        newPath->planCenterPivotPosition();
-        mCurrentContainer->addContained(newPath);
-        firstVectorPath = newPath.get();
-    }
 
-    const auto targetVP = firstVectorPath->getPathAnimator();
-    const QMatrix firstTranf = firstVectorPath->getTotalTransform();
-    for(const auto &box : mSelectedBoxes) {
-        if(box == firstVectorPath) continue;
-        if(const auto boxPath = enve_cast<SmartVectorPath*>(box)) {
-            const QMatrix relTransf = boxPath->getTotalTransform()*
-                    firstTranf.inverted();
-            const auto srcVP = boxPath->getPathAnimator();
-            srcVP->applyTransform(relTransf);
-            targetVP->moveAllFrom(srcVP);
-            box->removeFromParent_k();
-        }
-    }
+    SmartVectorPath * const newPath = getPathResultingFromCombine();
+
+    clearBoxesSelection();
+    addBoxToSelection(newPath);
 }
 
 void Canvas::alignSelectedBoxes(const Qt::Alignment align,

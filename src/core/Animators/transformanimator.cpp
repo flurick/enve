@@ -22,17 +22,18 @@
 #include "skia/skqtconversions.h"
 #include "matrixdecomposition.h"
 #include "svgexporter.h"
+#include "Boxes/boundingbox.h"
 
 BasicTransformAnimator::BasicTransformAnimator() :
     StaticComplexAnimator("transform") {
-    mPosAnimator = enve::make_shared<QPointFAnimator>("pos");
+    mPosAnimator = enve::make_shared<QPointFAnimator>("translation");
     mPosAnimator->setBaseValue(QPointF(0, 0));
 
     mScaleAnimator = enve::make_shared<QPointFAnimator>("scale");
     mScaleAnimator->setBaseValue(QPointF(1, 1));
     mScaleAnimator->setPrefferedValueStep(0.05);
 
-    mRotAnimator = enve::make_shared<QrealAnimator>("rot");
+    mRotAnimator = enve::make_shared<QrealAnimator>("rotation");
     mRotAnimator->setCurrentBaseValue(0);
 
     ca_addChild(mPosAnimator);
@@ -92,7 +93,8 @@ void BasicTransformAnimator::startScaleTransform() {
 }
 
 void BasicTransformAnimator::rotateRelativeToSavedValue(const qreal rotRel) {
-    mRotAnimator->incSavedValueToCurrentValue(rotRel);
+    const bool flip = rotationFlipped();
+    mRotAnimator->incSavedValueToCurrentValue(flip ? -rotRel : rotRel);
 }
 
 void BasicTransformAnimator::moveRelativeToSavedValue(const qreal dX, const qreal dY) {
@@ -157,18 +159,9 @@ SkPoint BasicTransformAnimator::mapFromParent(const SkPoint &parentRelPos) const
     return toSkPoint(mapFromParent(toQPointF(parentRelPos)));
 }
 
-QMatrix BasicTransformAnimator::getCurrentTransform() {
-    QMatrix matrix;
-    matrix.translate(mPosAnimator->getEffectiveXValue(),
-                     mPosAnimator->getEffectiveYValue());
-
-    matrix.rotate(mRotAnimator->getEffectiveValue());
-    matrix.scale(mScaleAnimator->getEffectiveXValue(),
-                 mScaleAnimator->getEffectiveYValue());
-    return matrix;
-}
-
-QMatrix BasicTransformAnimator::getRelativeTransformAtFrame(const qreal relFrame) {
+QMatrix BasicTransformAnimator::getRelativeTransformAtFrame(
+        const qreal relFrame, QMatrix* postTransform) const {
+    Q_UNUSED(postTransform)
     QMatrix matrix;
     matrix.translate(mPosAnimator->getEffectiveXValue(relFrame),
                      mPosAnimator->getEffectiveYValue(relFrame));
@@ -180,19 +173,11 @@ QMatrix BasicTransformAnimator::getRelativeTransformAtFrame(const qreal relFrame
 }
 
 void BasicTransformAnimator::moveByAbs(const QPointF &absTrans) {
-    if(!mParentTransform) return;
     const auto savedRelPos = mPosAnimator->getSavedValue();
-    const auto savedAbsPos = mParentTransform->mapRelPosToAbs(savedRelPos);
-    moveToAbs(savedAbsPos + absTrans);
-}
-
-void BasicTransformAnimator::moveToAbs(const QPointF &absPos) {
-    setAbsolutePos(absPos);
-}
-
-void BasicTransformAnimator::setAbsolutePos(const QPointF &pos) {
-    if(!mParentTransform) return;
-    setRelativePos(mParentTransform->mapAbsPosToRel(pos));
+    const auto transform = mPostTransform*mInheritedTransform;
+    const auto savedAbsPos = transform.map(savedRelPos);
+    const auto relPos = transform.inverted().map(savedAbsPos + absTrans);
+    setRelativePos(relPos);
 }
 
 void BasicTransformAnimator::setRelativePos(const QPointF &relPos) {
@@ -206,12 +191,14 @@ void BasicTransformAnimator::rotateRelativeToSavedValue(const qreal rotRel,
     matrix.rotate(rotRel);
     matrix.translate(-pivot.x() + mPosAnimator->getSavedXValue(),
                      -pivot.y() + mPosAnimator->getSavedYValue());
-    rotateRelativeToSavedValue(rotRel);
+    const bool flip = rotationFlipped();
+    rotateRelativeToSavedValue(flip ? -rotRel : rotRel);
     mPosAnimator->setBaseValue(QPointF(matrix.dx(), matrix.dy()));
 }
 
 void BasicTransformAnimator::updateRelativeTransform(const UpdateReason reason) {
-    mRelTransform = getCurrentTransform();
+    mRelTransform = getRelativeTransformAtFrame(anim_getCurrentRelFrame(),
+                                                &mPostTransform);
     updateTotalTransform(reason);
 }
 
@@ -222,6 +209,7 @@ void BasicTransformAnimator::updateInheritedTransform(const UpdateReason reason)
         mInheritedTransform.reset();
     }
     updateTotalTransform(reason);
+    emit inheritedTransformChanged(reason);
 }
 
 void BasicTransformAnimator::updateTotalTransform(const UpdateReason reason) {
@@ -231,6 +219,10 @@ void BasicTransformAnimator::updateTotalTransform(const UpdateReason reason) {
         mTotalTransform = mRelTransform;
     }
     emit totalTransformChanged(reason);
+}
+
+bool BasicTransformAnimator::rotationFlipped() const {
+    return mInheritedTransform.m11() * mInheritedTransform.m22() < 0.;
 }
 
 const QMatrix &BasicTransformAnimator::getInheritedTransform() const {
@@ -270,19 +262,6 @@ void BasicTransformAnimator::scaleRelativeToSavedValue(const qreal sx,
     mPosAnimator->setBaseValue(QPointF(matrix.dx(), matrix.dy()));
 }
 
-QMatrix BasicTransformAnimator::getParentTotalTransformAtRelFrame(
-        const qreal relFrame) {
-    if(mParentTransform.data() == nullptr) {
-        return QMatrix();
-    } else {
-        const qreal absFrame = prp_relFrameToAbsFrameF(relFrame);
-        const qreal parentRelFrame =
-                mParentTransform->prp_absFrameToRelFrameF(absFrame);
-        return mParentTransform->
-                getTotalTransformAtFrame(parentRelFrame);
-    }
-}
-
 QPointFAnimator *BasicTransformAnimator::getPosAnimator() const {
     return mPosAnimator.get();
 }
@@ -296,7 +275,7 @@ QrealAnimator *BasicTransformAnimator::getRotAnimator() const {
 }
 
 QMatrix BasicTransformAnimator::getInheritedTransformAtFrame(
-        const qreal relFrame) {
+        const qreal relFrame) const {
     if(mParentTransform) {
         const qreal absFrame = prp_relFrameToAbsFrameF(relFrame);
         const qreal parentRelFrame =
@@ -308,7 +287,7 @@ QMatrix BasicTransformAnimator::getInheritedTransformAtFrame(
 }
 
 QMatrix BasicTransformAnimator::getTotalTransformAtFrame(
-        const qreal relFrame) {
+        const qreal relFrame) const {
     if(mParentTransform) {
         const qreal absFrame = prp_relFrameToAbsFrameF(relFrame);
         const qreal parentRelFrame =
@@ -425,8 +404,16 @@ void AdvancedTransformAnimator::setPivotFixedTransform(
     }
 }
 
+QPointF AdvancedTransformAnimator::getPivot(const qreal relFrame) {
+    return mPivotAnimator->getEffectiveValue(relFrame);
+}
+
 QPointF AdvancedTransformAnimator::getPivot() {
     return mPivotAnimator->getEffectiveValue();
+}
+
+QPointF AdvancedTransformAnimator::getPivotAbs(const qreal relFrame) {
+    return mapRelPosToAbs(mPivotAnimator->getEffectiveValue(relFrame));
 }
 
 QPointF AdvancedTransformAnimator::getPivotAbs() {
@@ -482,21 +469,38 @@ void AdvancedTransformAnimator::startTransformSkipOpacity() {
     startShearTransform();
 }
 
-QMatrix AdvancedTransformAnimator::getCurrentTransform() {
-    const qreal pivotX = mPivotAnimator->getEffectiveXValue();
-    const qreal pivotY = mPivotAnimator->getEffectiveYValue();
+QMatrix valuesToMatrix(const qreal pivotX, const qreal pivotY,
+                       const qreal posX, const qreal posY,
+                       const qreal rot,
+                       const qreal scaleX, const qreal scaleY,
+                       const qreal shearX, const qreal shearY) {
     QMatrix matrix;
-    matrix.translate(pivotX + mPosAnimator->getEffectiveXValue(),
-                     pivotY + mPosAnimator->getEffectiveYValue());
-
-    matrix.rotate(mRotAnimator->getEffectiveValue());
-    matrix.scale(mScaleAnimator->getEffectiveXValue(),
-                 mScaleAnimator->getEffectiveYValue());
-    matrix.shear(mShearAnimator->getEffectiveXValue(),
-                 mShearAnimator->getEffectiveYValue());
-
+    matrix.translate(pivotX + posX, pivotY + posY);
+    matrix.rotate(rot);
+    matrix.scale(scaleX, scaleY);
+    matrix.shear(shearX, shearY);
     matrix.translate(-pivotX, -pivotY);
+
     return matrix;
+}
+
+void AdvancedTransformAnimator::applyTransformEffects(
+        const qreal relFrame,
+        qreal& pivotX, qreal& pivotY,
+        qreal& posX, qreal& posY,
+        qreal& rot,
+        qreal& scaleX, qreal& scaleY,
+        qreal& shearX, qreal& shearY,
+        QMatrix& postTransform) const {
+    const auto parent = getFirstAncestor<BoundingBox>();
+    if(!parent) return;
+    parent->applyTransformEffects(relFrame,
+                                  pivotX, pivotY,
+                                  posX, posY,
+                                  rot,
+                                  scaleX, scaleY,
+                                  shearX, shearY,
+                                  postTransform);
 }
 
 void AdvancedTransformAnimator::setValues(const TransformValues &values) {
@@ -508,80 +512,64 @@ void AdvancedTransformAnimator::setValues(const TransformValues &values) {
 }
 
 QMatrix AdvancedTransformAnimator::getRotScaleShearTransform() {
-    const qreal pivotX = mPivotAnimator->getEffectiveXValue();
-    const qreal pivotY = mPivotAnimator->getEffectiveYValue();
+    qreal pivotX = mPivotAnimator->getEffectiveXValue();
+    qreal pivotY = mPivotAnimator->getEffectiveYValue();
 
-    QMatrix matrix;
-    matrix.translate(pivotX, pivotY);
-    matrix.rotate(mRotAnimator->getEffectiveValue());
-    matrix.scale(mScaleAnimator->getEffectiveXValue(),
-                 mScaleAnimator->getEffectiveYValue());
-    matrix.shear(mShearAnimator->getEffectiveXValue(),
-                 mShearAnimator->getEffectiveYValue());
-    matrix.translate(-pivotX, -pivotY);
+    qreal posX = 0.;
+    qreal posY = 0.;
+
+    qreal rot = mRotAnimator->getEffectiveValue();
+
+    qreal scaleX = mScaleAnimator->getEffectiveXValue();
+    qreal scaleY = mScaleAnimator->getEffectiveYValue();
+
+    qreal shearX = mShearAnimator->getEffectiveXValue();
+    qreal shearY = mShearAnimator->getEffectiveYValue();
+
+
+    QMatrix matrix = valuesToMatrix(pivotX, pivotY,
+                                    posX, posY,
+                                    rot,
+                                    scaleX, scaleY,
+                                    shearX, shearY);
+
     return matrix;
 }
 
-QMatrix AdvancedTransformAnimator::getRelativeTransformAtFrame(const qreal relFrame) {
-    const qreal pivotX = mPivotAnimator->getEffectiveXValue(relFrame);
-    const qreal pivotY = mPivotAnimator->getEffectiveYValue(relFrame);
-    QMatrix matrix;
-    matrix.translate(pivotX + mPosAnimator->getEffectiveXValue(relFrame),
-                     pivotY + mPosAnimator->getEffectiveYValue(relFrame));
+QMatrix AdvancedTransformAnimator::getRelativeTransformAtFrame(
+        const qreal relFrame, QMatrix* postTransform) const {
+    qreal pivotX = mPivotAnimator->getEffectiveXValue(relFrame);
+    qreal pivotY = mPivotAnimator->getEffectiveYValue(relFrame);
 
-    matrix.rotate(mRotAnimator->getEffectiveValue(relFrame));
-    matrix.scale(mScaleAnimator->getEffectiveXValue(relFrame),
-                 mScaleAnimator->getEffectiveYValue(relFrame));
-    matrix.shear(mShearAnimator->getEffectiveXValue(relFrame),
-                 mShearAnimator->getEffectiveYValue(relFrame));
+    qreal posX = mPosAnimator->getEffectiveXValue(relFrame);
+    qreal posY = mPosAnimator->getEffectiveYValue(relFrame);
 
-    matrix.translate(-pivotX, -pivotY);
-    return matrix;
-}
+    qreal rot = mRotAnimator->getEffectiveValue(relFrame);
 
-QDomElement AdvancedTransformAnimator::prp_writePropertyXEV_impl(const XevExporter& exp) const {
-    auto result = exp.createElement("Transform");
+    qreal scaleX = mScaleAnimator->getEffectiveXValue(relFrame);
+    qreal scaleY = mScaleAnimator->getEffectiveYValue(relFrame);
 
-    auto translation = mPosAnimator->prp_writeNamedPropertyXEV("Translation", exp);
-    result.appendChild(translation);
+    qreal shearX = mShearAnimator->getEffectiveXValue(relFrame);
+    qreal shearY = mShearAnimator->getEffectiveYValue(relFrame);
 
-    auto scale = mScaleAnimator->prp_writeNamedPropertyXEV("Scale", exp);
-    result.appendChild(scale);
+    QMatrix postTransformT;
 
-    auto rotation = mRotAnimator->prp_writeNamedPropertyXEV("Rotation", exp);
-    result.appendChild(rotation);
+    applyTransformEffects(relFrame,
+                          pivotX, pivotY,
+                          posX, posY,
+                          rot,
+                          scaleX, scaleY,
+                          shearX, shearY,
+                          postTransformT);
+    if(postTransform) *postTransform = postTransformT;
 
-    auto pivot = mPivotAnimator->prp_writeNamedPropertyXEV("Pivot", exp);
-    result.appendChild(pivot);
+    const auto matrix = valuesToMatrix(pivotX, pivotY,
+                                       posX, posY,
+                                       rot,
+                                       scaleX, scaleY,
+                                       shearX, shearY);
 
-    auto shear = mShearAnimator->prp_writeNamedPropertyXEV("Shear", exp);
-    result.appendChild(shear);
-
-    auto opacity = mOpacityAnimator->prp_writeNamedPropertyXEV("Opacity", exp);
-    result.appendChild(opacity);
-
-    return result;
-}
-
-void AdvancedTransformAnimator::prp_readPropertyXEV_impl(
-        const QDomElement& ele, const XevImporter& imp) {
-    const auto translation = ele.firstChildElement("Translation");
-    mPosAnimator->prp_readPropertyXEV(translation, imp);
-
-    const auto scale = ele.firstChildElement("Scale");
-    mScaleAnimator->prp_readPropertyXEV(scale, imp);
-
-    const auto rotation = ele.firstChildElement("Rotation");
-    mRotAnimator->prp_readPropertyXEV(rotation, imp);
-
-    const auto pivot = ele.firstChildElement("Pivot");
-    mPivotAnimator->prp_readPropertyXEV(pivot, imp);
-
-    const auto shear = ele.firstChildElement("Shear");
-    mShearAnimator->prp_readPropertyXEV(shear, imp);
-
-    const auto opacity = ele.firstChildElement("Opacity");
-    mOpacityAnimator->prp_readPropertyXEV(opacity, imp);
+    return matrix*postTransformT;
 }
 
 BoxTransformAnimator::BoxTransformAnimator() {

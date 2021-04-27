@@ -26,33 +26,31 @@
 #include "GUI/global.h"
 #include <QWindow>
 
-ColorPickingWidget::ColorPickingWidget(QWidget * const parent)
+ColorPickingWidget::ColorPickingWidget(QScreen* const screen,
+                                       QWidget * const parent)
     : QWidget(parent) {
-    QScreen * screen = nullptr;
-    if(const auto window = windowHandle())
-        screen = window->screen();
-    else screen = QGuiApplication::primaryScreen();
-    if(!screen) return;
-
     mScreenshot = screen->grabWindow(0).toImage();
 
     QPixmap picker(":/cursors/cursor_color_picker.png");
-    QApplication::setOverrideCursor(QCursor(picker, 2, 20) );
-    grabKeyboard();
-    grabMouse();
+    setCursor(QCursor(picker, 2, 20));
 
     setMouseTracking(true);
 
-    setWindowFlag(Qt::SplashScreen);
+    setWindowFlags(Qt::Dialog | Qt::FramelessWindowHint);
+    setAttribute(Qt::WA_DeleteOnClose);
+
     showFullScreen();
-    updateBox(QCursor::pos());
+    setFocus();
 }
 
-void ColorPickingWidget::mouseReleaseEvent(QMouseEvent *e) {
-    if(e->button() == Qt::RightButton) endThis();
-    emit colorSelected(mCurrentColor);
-    Document::sInstance->actionFinished();
-    endThis();
+void ColorPickingWidget::mousePressEvent(QMouseEvent *e) {
+    if(e->button() == Qt::RightButton) {
+        close();
+    } else if(e->button() == Qt::LeftButton) {
+        emit colorSelected(mCurrentColor);
+        Document::sInstance->actionFinished();
+        close();
+    }
 }
 
 void ColorPickingWidget::paintEvent(QPaintEvent *) {
@@ -75,11 +73,15 @@ void ColorPickingWidget::paintEvent(QPaintEvent *) {
 
 void ColorPickingWidget::keyPressEvent(QKeyEvent *e) {
     if(e->isAutoRepeat()) return;
-    endThis();
+    close();
 }
 
 void ColorPickingWidget::mouseMoveEvent(QMouseEvent *e) {
-    updateBox(e->globalPos());
+    updateBox(e->pos());
+}
+
+void ColorPickingWidget::focusOutEvent(QFocusEvent*) {
+    close();
 }
 
 QColor ColorPickingWidget::colorFromPoint(const int x, const int y) {
@@ -87,17 +89,9 @@ QColor ColorPickingWidget::colorFromPoint(const int x, const int y) {
     return QColor::fromRgb(rgb);
 }
 
-void ColorPickingWidget::endThis() {
-    QApplication::restoreOverrideCursor();
-    releaseMouse();
-    releaseKeyboard();
-    close();
-}
-
-void ColorPickingWidget::updateBox(const QPoint& globalPos) {
-    mCursorX = globalPos.x();
-    mCursorY = globalPos.y();
-    mCurrentColor = colorFromPoint(globalPos.x(), globalPos.y());
+void ColorPickingWidget::updateBox(const QPoint& pos) {
+    mCursorX = pos.x();
+    mCursorY = pos.y();
+    mCurrentColor = colorFromPoint(pos.x(), pos.y());
     update();
 }
-

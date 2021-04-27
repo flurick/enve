@@ -106,8 +106,6 @@ class CORE_EXPORT FillSettingsAnimator : public PaintSettingsAnimator {
 protected:
     FillSettingsAnimator(BoundingBox * const parent) :
         PaintSettingsAnimator("fill", parent) {}
-
-    QString prp_tagNameXEV() const override { return "Fill"; }
 public:
     void saveSVG(SvgExporter& exp, QDomElement& parent,
                  const FrameRange& visRange) const {
@@ -122,7 +120,7 @@ struct CORE_EXPORT UpdatePaintSettings {
 
     virtual ~UpdatePaintSettings();
 
-    virtual void applyPainterSettingsSk(SkPaint *paint);
+    void applyPainterSettingsSk(SkPaint& paint, const float opactiy = 1.f);
 
     void updateGradient(const QGradientStops &stops,
                         const QPointF &start,
@@ -141,8 +139,6 @@ struct CORE_EXPORT UpdateStrokeSettings : UpdatePaintSettings {
             const PaintType paintTypeT,
             const QPainter::CompositionMode &outlineCompositionModeT);
     UpdateStrokeSettings();
-
-    void applyPainterSettingsSk(SkPaint *paint);
 
     QPainter::CompositionMode fOutlineCompositionMode =
             QPainter::CompositionMode_Source;

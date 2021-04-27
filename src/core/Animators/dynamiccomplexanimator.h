@@ -47,10 +47,11 @@ public:
         const auto eData = static_cast<const eMimeData*>(data);
         const auto bData = static_cast<const eDraggedObjects*>(eData);
         const bool duplicate = QApplication::queryKeyboardModifiers() & Qt::CTRL;
-        for(int i = 0; i < bData->count(); i++) {
-            const auto iObj = bData->getObject<T>(i);
-            if(duplicate) insertChild(createDuplicate(iObj), index + i);
-            else insertChild(iObj->template ref<T>(), index + i);
+        const auto objects = bData->getObjects<T>();
+        int i = index;
+        for(const auto iObj : objects) {
+            if(duplicate) insertChild(createDuplicate(iObj), i++);
+            else insertChild(iObj->template ref<T>(), i++);
         }
         return true;
     }
@@ -308,6 +309,7 @@ public:
     }
 protected:
     QDomElement prp_writePropertyXEV_impl(const XevExporter& exp) const override {
+        if(!this->ca_hasChildren()) return QDomElement();
         auto result = exp.createElement(this->prp_tagNameXEV());
         const auto& children = this->ca_getChildren();
         int id = 0;

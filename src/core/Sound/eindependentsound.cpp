@@ -56,10 +56,8 @@ void eIndependentSound::fileHandlerAfterAssigned(SoundFileHandler *obj) {
         const auto newDataHandler = FileDataCacheHandler::
                 sGetDataHandler<SoundDataHandler>(obj->path());
         setSoundDataHandler(newDataHandler);
-        prp_setName(QFileInfo(obj->path()).fileName());
     } else {
         setSoundDataHandler(nullptr);
-        prp_setName("Sound");
     }
 }
 
@@ -99,8 +97,13 @@ bool eIndependentSound::SWT_shouldBeVisible(const SWT_RulesCollection &rules,
     return parentSatisfies;
 }
 
-void eIndependentSound::setFilePath(const QString &path) {
+void eIndependentSound::setFilePathNoRename(const QString &path) {
     mFileHandler.assign(path);
+}
+
+void eIndependentSound::setFilePath(const QString &path) {
+    setFilePathNoRename(path);
+    rename(QFileInfo(path).completeBaseName());
 }
 
 void eIndependentSound::updateDurationRectLength() {
@@ -123,17 +126,18 @@ void eIndependentSound::prp_writeProperty_impl(eWriteStream& dst) const {
 void eIndependentSound::prp_readProperty_impl(eReadStream& src) {
     eBoxOrSound::prp_readProperty_impl(src);
     const QString filePath = src.readFilePath();
-    if(!filePath.isEmpty()) setFilePath(filePath);
+    if(!filePath.isEmpty()) setFilePathNoRename(filePath);
 }
 
 QDomElement eIndependentSound::prp_writePropertyXEV_impl(const XevExporter& exp) const {
     auto result = eBoxOrSound::prp_writePropertyXEV_impl(exp);
-    result.setAttribute("src", mFileHandler.path());
+    const QString& absSrc = mFileHandler.path();
+    XevExportHelpers::setAbsAndRelFileSrc(absSrc, result, exp);
     return result;
 }
 
 void eIndependentSound::prp_readPropertyXEV_impl(const QDomElement& ele, const XevImporter& imp) {
     eBoxOrSound::prp_readPropertyXEV_impl(ele, imp);
-    const auto src = ele.attribute("src");
-    if(!src.isEmpty()) setFilePath(src);
+    const QString absSrc = XevExportHelpers::getAbsAndRelFileSrc(ele, imp);
+    if(!absSrc.isEmpty()) setFilePathNoRename(absSrc);
 }

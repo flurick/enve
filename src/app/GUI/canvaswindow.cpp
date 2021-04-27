@@ -31,6 +31,7 @@
 #include "memorychecker.h"
 #include "memoryhandler.h"
 #include "simpletask.h"
+#include "eevent.h"
 
 CanvasWindow::CanvasWindow(Document &document,
                            QWidget * const parent) :
@@ -39,8 +40,6 @@ CanvasWindow::CanvasWindow(Document &document,
     //setAttribute(Qt::WA_OpaquePaintEvent, true);
     connect(&mDocument, &Document::canvasModeSet,
             this, &CanvasWindow::setCanvasMode);
-    connect(&mDocument, &Document::sculptBrushSizeChanged,
-            this, &CanvasWindow::updateSculptModeCursor);
 
     setAcceptDrops(true);
     setMouseTracking(true);
@@ -97,35 +96,6 @@ void CanvasWindow::updatePaintModeCursor() {
     }
 }
 
-void CanvasWindow::updateSculptModeCursor() {
-    if(mDocument.fCanvasMode != CanvasMode::sculptPath) return;
-    mValidSculptTarget = mCurrentCanvas && mCurrentCanvas->hasValidSculptTarget();
-    const qreal viewScale = mViewTransform.m11();
-    const qreal radius = mDocument.fSculptBrush.radius()*viewScale;
-    const qreal clampedRadius = qBound(1., radius, 200.);
-    const int iRadius = qRound(clampedRadius);
-    const int margin = 3;
-    const int dim = 2*(iRadius + margin);
-    QPixmap brushPix(dim, dim);
-    brushPix.fill(Qt::transparent);
-    QPainter p(&brushPix);
-    p.setRenderHint(QPainter::Antialiasing);
-    const QRect circleRect(margin, margin, 2*iRadius, 2*iRadius);
-    const int penWidth = mValidSculptTarget ? 1 : 2;
-    QPen pen;
-    pen.setWidth(penWidth);
-    pen.setColor(Qt::white);
-    p.setPen(pen);
-    p.drawEllipse(circleRect);
-    pen.setColor(Qt::black);
-    p.setPen(pen);
-    p.drawEllipse(circleRect.adjusted(-penWidth, -penWidth,
-                                       penWidth,  penWidth));
-    p.end();
-
-    setCursor(QCursor(brushPix, iRadius + margin, iRadius + margin));
-}
-
 void CanvasWindow::setCanvasMode(const CanvasMode mode) {
     if(mode == CanvasMode::boxTransform) {
         setCursor(QCursor(Qt::ArrowCursor) );
@@ -143,8 +113,6 @@ void CanvasWindow::setCanvasMode(const CanvasMode mode) {
         setCursor(QCursor(QPixmap(":/cursors/cursor-rect.xpm"), 4, 4) );
     } else if(mode == CanvasMode::textCreate) {
         setCursor(QCursor(QPixmap(":/cursors/cursor-text.xpm"), 4, 4) );
-    } else if(mode == CanvasMode::sculptPath) {
-        updateSculptModeCursor();
     } else if(mode == CanvasMode::pickFillStroke) {
         setCursor(QCursor(QPixmap(":/cursors/cursor_color_picker.png"), 2, 20) );
     } else {
@@ -203,9 +171,6 @@ void CanvasWindow::tabletEvent(QTabletEvent *e) {
     if(canvasMode == CanvasMode::paint) {
         if(!mValidPaintTarget) updatePaintModeCursor();
         update();
-    } else if(canvasMode == CanvasMode::sculptPath) {
-        if(!mValidSculptTarget) updateSculptModeCursor();
-        finishAction();
     }
 }
 
@@ -222,7 +187,7 @@ void CanvasWindow::mousePressEvent(QMouseEvent *event) {
     if(mMouseGrabber && button == Qt::LeftButton) return;
     const auto pos = mapToCanvasCoord(event->pos());
     mCurrentCanvas->mousePressEvent(
-                MouseEvent(pos, pos, pos, mMouseGrabber,
+                eMouseEvent(pos, pos, pos, mMouseGrabber,
                            mViewTransform.m11(), event,
                            [this]() { releaseMouse(); },
                            [this]() { grabMouse(); },
@@ -232,11 +197,8 @@ void CanvasWindow::mousePressEvent(QMouseEvent *event) {
     if(button == Qt::LeftButton) {
         mPrevPressPos = pos;
         const auto mode = mDocument.fCanvasMode;
-        if(mode == CanvasMode::paint && !mValidPaintTarget)
+        if(mode == CanvasMode::paint && !mValidPaintTarget) {
             updatePaintModeCursor();
-        else if(mode == CanvasMode::sculptPath) {
-            if(!mValidSculptTarget) updateSculptModeCursor();
-            grabMouse();
         }
     }
 }
@@ -253,7 +215,7 @@ void CanvasWindow::mouseReleaseEvent(QMouseEvent *event) {
     if(!mCurrentCanvas || mBlockInput) return;
     const auto pos = mapToCanvasCoord(event->pos());
     mCurrentCanvas->mouseReleaseEvent(
-                MouseEvent(pos, mPrevMousePos, mPrevPressPos,
+                eMouseEvent(pos, mPrevMousePos, mPrevPressPos,
                            mMouseGrabber, mViewTransform.m11(),
                            event, [this]() { releaseMouse(); },
                            [this]() { grabMouse(); },
@@ -273,7 +235,7 @@ void CanvasWindow::mouseMoveEvent(QMouseEvent *event) {
         pos = mPrevMousePos;
     }
     mCurrentCanvas->mouseMoveEvent(
-                MouseEvent(pos, mPrevMousePos, mPrevPressPos,
+                eMouseEvent(pos, mPrevMousePos, mPrevPressPos,
                            mMouseGrabber, mViewTransform.m11(),
                            event, [this]() { releaseMouse(); },
                            [this]() { grabMouse(); },
@@ -299,7 +261,7 @@ void CanvasWindow::mouseDoubleClickEvent(QMouseEvent *event) {
     if(!mCurrentCanvas || mBlockInput) return;
     const auto pos = mapToCanvasCoord(event->pos());
     mCurrentCanvas->mouseDoubleClickEvent(
-                MouseEvent(pos, mPrevMousePos, mPrevPressPos,
+                eMouseEvent(pos, mPrevMousePos, mPrevPressPos,
                            mMouseGrabber, mViewTransform.m11(),
                            event, [this]() { releaseMouse(); },
                            [this]() { grabMouse(); },
@@ -328,10 +290,11 @@ void CanvasWindow::readState(eReadStream &src) {
     int sceneReadId; src >> sceneReadId;
     int sceneDocumentId; src >> sceneDocumentId;
 
-    SimpleTask::sScheduleContexted(this, [this, sceneReadId, sceneDocumentId]() {
+    src.addReadStreamDoneTask([this, sceneReadId, sceneDocumentId]
+                              (eReadStream& src) {
         BoundingBox* sceneBox = nullptr;
         if(sceneReadId != -1)
-            sceneBox = BoundingBox::sGetBoxByReadId(sceneReadId);
+            sceneBox = src.getBoxByReadId(sceneReadId);
         if(!sceneBox && sceneDocumentId != -1)
             sceneBox = BoundingBox::sGetBoxByDocumentId(sceneDocumentId);
 
@@ -342,12 +305,14 @@ void CanvasWindow::readState(eReadStream &src) {
     mFitToSizeBlocked = true;
 }
 
-void CanvasWindow::readStateXEV(const QDomElement& ele) {
+void CanvasWindow::readStateXEV(XevReadBoxesHandler& boxReadHandler,
+                                const QDomElement& ele) {
     const auto sceneIdStr = ele.attribute("sceneId");
     const int sceneId = XmlExportHelpers::stringToInt(sceneIdStr);
 
-    SimpleTask::sScheduleContexted(this, [this, sceneId]() {
-        const auto sceneBox = BoundingBox::sGetBoxByReadId(sceneId);
+    boxReadHandler.addXevImporterDoneTask(
+                [this, sceneId](const XevReadBoxesHandler& imp) {
+        const auto sceneBox = imp.getBoxByReadId(sceneId);
         const auto scene = enve_cast<Canvas*>(sceneBox);
         setCurrentCanvas(scene);
     });
@@ -466,7 +431,7 @@ bool CanvasWindow::handleRevertPathKeyPress(QKeyEvent *event) {
     return true;
 }
 
-bool CanvasWindow::handleStartTransformKeyPress(const KeyEvent& e) {
+bool CanvasWindow::handleStartTransformKeyPress(const eKeyEvent& e) {
     if(mMouseGrabber) return false;
     if(e.fKey == Qt::Key_R) {
         return mCurrentCanvas->startRotatingAction(e);
@@ -525,7 +490,7 @@ bool CanvasWindow::KFT_keyReleaseEvent(QKeyEvent *event) {
     if(!isMouseGrabber()) return false;
     const QPoint globalPos = QCursor::pos();
     const auto pos = mapToCanvasCoord(mapFromGlobal(globalPos));
-    const KeyEvent e(pos, mPrevMousePos, mPrevPressPos, mMouseGrabber,
+    const eKeyEvent e(pos, mPrevMousePos, mPrevPressPos, mMouseGrabber,
                      mViewTransform.m11(), globalPos,
                      QApplication::mouseButtons(), event,
                      [this]() { releaseMouse(); },
@@ -540,7 +505,7 @@ bool CanvasWindow::KFT_keyPressEvent(QKeyEvent *event) {
     if(mCurrentCanvas->isPreviewingOrRendering()) return false;
     const QPoint globalPos = QCursor::pos();
     const auto pos = mapToCanvasCoord(mapFromGlobal(globalPos));
-    const KeyEvent e(pos, mPrevMousePos, mPrevPressPos, mMouseGrabber,
+    const eKeyEvent e(pos, mPrevMousePos, mPrevPressPos, mMouseGrabber,
                      mViewTransform.m11(), globalPos,
                      QApplication::mouseButtons(), event,
                      [this]() { releaseMouse(); },
@@ -570,10 +535,8 @@ bool CanvasWindow::KFT_keyPressEvent(QKeyEvent *event) {
         mActions.invertSelectionAction();
     } else if(e.fKey == Qt::Key_W) {
         if(canvasMode == CanvasMode::paint) mDocument.incBrushRadius();
-        else mDocument.incSculptBrushRadius();
     } else if(e.fKey == Qt::Key_Q) {
         if(canvasMode == CanvasMode::paint) mDocument.decBrushRadius();
-        else mDocument.decSculptBrushRadius();
     } else if((e.fKey == Qt::Key_Enter || e.fKey == Qt::Key_Return) &&
               canvasMode == CanvasMode::drawPath) {
         const bool manual = mDocument.fDrawPathManual;

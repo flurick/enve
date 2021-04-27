@@ -28,7 +28,9 @@ enum class RasterEffectType : short {
     MOTION_BLUR,
     OIL,
     WIPE,
-    NOISE_FADE
+    NOISE_FADE,
+    COLORIZE,
+    BRIGHTNESS_CONTRAST
 };
 
 struct BoxRenderData;
@@ -54,7 +56,6 @@ public:
     QMimeData *SWT_createMimeData() final;
 
     void prp_setupTreeViewMenu(PropertyMenu * const menu);
-    QString prp_tagNameXEV() const { return "RasterEffect"; }
 
     void writeIdentifier(eWriteStream& dst) const;
     void writeIdentifierXEV(QDomElement& ele) const;

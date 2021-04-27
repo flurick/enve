@@ -67,26 +67,30 @@ void ImageBox::writeBoundingBox(eWriteStream& dst) const {
 void ImageBox::readBoundingBox(eReadStream& src) {
     BoundingBox::readBoundingBox(src);
     const QString path = src.readFilePath();
-    setFilePath(path);
+    setFilePathNoRename(path);
 }
 
 QDomElement ImageBox::prp_writePropertyXEV_impl(const XevExporter& exp) const {
     auto result = BoundingBox::prp_writePropertyXEV_impl(exp);
-    result.setAttribute("src", mFileHandler.path());
+    const QString& absSrc = mFileHandler.path();
+    XevExportHelpers::setAbsAndRelFileSrc(absSrc, result, exp);
     return result;
 }
 
 void ImageBox::prp_readPropertyXEV_impl(const QDomElement& ele, const XevImporter& imp) {
     BoundingBox::prp_readPropertyXEV_impl(ele, imp);
-    const auto src = ele.attribute("src");
-    setFilePath(src);
+    const QString absSrc = XevExportHelpers::getAbsAndRelFileSrc(ele, imp);
+    setFilePathNoRename(absSrc);
+}
+
+void ImageBox::setFilePathNoRename(const QString &path) {
+    mFileHandler.assign(path);
+    prp_afterWholeInfluenceRangeChanged();
 }
 
 void ImageBox::setFilePath(const QString &path) {
-    mFileHandler.assign(path);
-
-    rename(path.split("/").last());
-    prp_afterWholeInfluenceRangeChanged();
+    setFilePathNoRename(path);
+    rename(QFileInfo(path).completeBaseName());
 }
 
 void ImageBox::reload() {

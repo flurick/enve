@@ -46,7 +46,7 @@ enum class CanvasMode : short {
     rectCreate,
     textCreate,
 
-    sculptPath,
+    nullCreate,
     pickFillStroke
 };
 
@@ -135,8 +135,6 @@ public:
     virtual void prp_startTransform() {}
     virtual void prp_finishTransform() {}
 
-    virtual QString prp_tagNameXEV() const { return "Property"; }
-
     virtual int prp_getTotalFrameShift() const;
     virtual int prp_getInheritedFrameShift() const;
 
@@ -156,6 +154,7 @@ public:
 public:
     virtual void prp_readProperty(eReadStream& src);
     void prp_writeProperty(eWriteStream& dst) const;
+    QString prp_tagNameXEV() const;
 
     QDomElement prp_writePropertyXEV(const XevExporter& exp) const;
     void prp_readPropertyXEV(const QDomElement& ele, const XevImporter& imp);
@@ -163,6 +162,7 @@ public:
             const QString& name, const XevExporter& exp) const;
 
     QMatrix getTransform() const;
+    QMatrix getTransform(const qreal relFrame) const;
 
     void prp_setSelected(const bool selected);
     void prp_afterWholeInfluenceRangeChanged();
@@ -269,7 +269,7 @@ signals:
     void prp_parentChanged(ComplexAnimator*, QPrivateSignal);
     void prp_ancestorChanged(QPrivateSignal);
     void prp_pathChanged();
-    void prp_sceneChanged();
+    void prp_sceneChanged(Canvas*, Canvas*);
 private:
     bool prp_mSelected = false;
     bool mDrawOnCanvas = false;

@@ -253,7 +253,7 @@ void Animator::anim_appendKeyAction(const stdsptr<Key>& newKey) {
     }
 }
 
-void Animator::anim_removeKeyAction(const stdsptr<Key>& newKey) {
+void Animator::anim_removeKeyAction(const stdsptr<Key> newKey) {
     anim_removeKey(newKey);
     {
         prp_pushUndoRedoName("Remove Key");
@@ -422,7 +422,7 @@ void Animator::anim_getKeysInRect(const QRectF &selectionRect,
        selectionRect.right() - selRightFrame*pixelsPerFrame) {
         selRightFrame--;
     }
-    for(int i = selRightFrame; i >= selLeftFrame; i--) {
+    for(int i = selLeftFrame; i <= selRightFrame; i++) {
         Key * const keyAtPos = anim_getKeyAtAbsFrame(i);
         if(keyAtPos) keysList.append(keyAtPos);
     }

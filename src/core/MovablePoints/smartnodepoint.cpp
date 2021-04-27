@@ -142,10 +142,10 @@ void SmartNodePoint::canvasContextMenu(PointTypeMenu * const menu) {
             }
         };
         menu->addPlainAction("Remove", op);
-//        PointTypeMenu::PlainSelectedOp<SmartNodePoint> opApprox = [](SmartNodePoint * pt) {
-//            pt->actionRemove(true);
-//        };
-//        menu->addPlainAction("Remove approx.", opApprox);
+        PointTypeMenu::PlainSelectedOp<SmartNodePoint> opApprox = [](SmartNodePoint * pt) {
+            pt->actionRemove(true);
+        };
+        menu->addPlainAction("Remove approx.", opApprox);
     } else { //if(isDissolved()) {
         PointTypeMenu::PlainSelectedOp<SmartNodePoint> op = [](SmartNodePoint * pt) {
             pt->actionPromoteToNormal();
@@ -330,7 +330,8 @@ void SmartNodePoint::drawSk(SkCanvas * const canvas,
         font.setTypeface(SkTypeface::MakeFromName(nullptr, fontStyle));
         const auto nodeIdStr = QString::number(getNodeId());
         const ulong sizeT = static_cast<ulong>(nodeIdStr.size());
-        const auto cStr = nodeIdStr.toStdString().c_str();
+        const auto stdStr = nodeIdStr.toStdString();
+        const auto cStr = stdStr.c_str();
         SkRect bounds;
         font.measureText(cStr, sizeT*sizeof(char), SkTextEncoding::kUTF8, &bounds);
 

@@ -33,6 +33,7 @@
 #include "Private/Tasks/taskscheduler.h"
 #include "Properties/boolpropertycontainer.h"
 #include "ReadWrite/evformat.h"
+#include "internallinkbox.h"
 
 class FlipBookProperty : public BoolPropertyContainer {
     e_OBJECT
@@ -49,7 +50,7 @@ public:
     }
 
     void prp_readPropertyXEV_impl(const QDomElement &ele,
-                                  const XevImporter &imp) override {
+                                  const XevImporter& imp) override {
         BoolPropertyContainer::prp_readPropertyXEV_impl(ele, imp);
         SWT_setVisible(getValue());
     }
@@ -109,9 +110,9 @@ bool ContainerBox::SWT_dropInto(const int index, const QMimeData * const data) {
     if(eMimeData::sHasType<eBoxOrSound>(data)) {
         const auto eData = static_cast<const eMimeData*>(data);
         const auto bData = static_cast<const eDraggedObjects*>(eData);
+        const auto objects = bData->getObjects<eBoxOrSound>();
         int dropId = index;
-        for(int i = 0; i < bData->count(); i++) {
-            const auto iObj = bData->getObject<eBoxOrSound>(i);
+        for(const auto iObj : objects) {
             if(const auto box = enve_cast<ContainerBox*>(iObj)) {
                 if(box == this) continue;
                 if(isAncestor(box)) continue;
@@ -124,8 +125,8 @@ bool ContainerBox::SWT_dropInto(const int index, const QMimeData * const data) {
         const auto urls = data->urls();
         int dropId = index;
         for(const auto& url : urls) {
-            Actions::sInstance->importFile(url.path(), this,
-                                           (dropId++) - ca_getNumberOfChildren());
+            const int insertId = (dropId++) - ca_getNumberOfChildren();
+            Actions::sInstance->importFile(url.toLocalFile(), this, insertId);
         }
         return true;
     }
@@ -306,14 +307,20 @@ void ContainerBox::anim_scaleTime(const int pivotAbsFrame, const qreal scale) {
 }
 
 void ContainerBox::updateAllChildPaths(const UpdateReason reason,
-                                       void (PathBox::*func)(const UpdateReason)) {
+                                       const PathUpdater func) {
     for(const auto& box : mContainedBoxes) {
-        if(enve_cast<PathBox*>(box)) {
-            (static_cast<PathBox*>(box)->*func)(reason);
-        } else if(enve_cast<ContainerBox*>(box)) {
-            static_cast<ContainerBox*>(box)->updateAllChildPaths(reason, func);
+        if(const auto path = enve_cast<PathBox*>(box)) {
+            (path->*func)(reason);
+        } else if(const auto cont = enve_cast<ContainerBox*>(box)) {
+            cont->updateAllChildPaths(reason, func);
+        } else if(const auto link = enve_cast<InternalLinkBox*>(box)) {
+            const auto target = link->getFinalTarget();
+            if(const auto path = enve_cast<PathBox*>(target)) {
+                link->planUpdate(reason);
+            }
         }
     }
+    emit childPathsUpdated(reason, func);
 }
 
 void ContainerBox::forcedMarginMeaningfulChange() {
@@ -325,8 +332,7 @@ void ContainerBox::forcedMarginMeaningfulChange() {
     mForcedMargin.setBottom(qMax(inheritedMargin.bottom(), thisMargin.bottom()));
     mForcedMargin.setRight(qMax(inheritedMargin.right(), thisMargin.right()));
     for(const auto& box : mContainedBoxes) {
-        if(enve_cast<ContainerBox*>(box)) {
-            const auto cont = static_cast<ContainerBox*>(box);
+        if(const auto cont = enve_cast<ContainerBox*>(box)) {
             cont->forcedMarginMeaningfulChange();
         } else box->planUpdate(UpdateReason::userChange);
     }
@@ -570,7 +576,9 @@ void ContainerBox::shiftAll(const int shift) {
 
 void ContainerBox::updateRelBoundingRect() {
     SkPath boundingPaths;
-    for(const auto &child : mContainedBoxes) {
+    const auto minMax = getContainedMinMax();
+    for(int i = minMax.fMin; i <= minMax.fMax; i++) {
+        const auto& child = mContainedBoxes.at(i);
         if(child->isVisibleAndInVisibleDurationRect()) {
             SkPath childPath;
             const auto childRel = child->getRelBoundingRect();
@@ -589,7 +597,9 @@ void ContainerBox::updateRelBoundingRect() {
 FrameRange ContainerBox::prp_getIdenticalRelRange(const int relFrame) const {
     auto range = BoundingBox::prp_getIdenticalRelRange(relFrame);
     const int absFrame = prp_relFrameToAbsFrame(relFrame);
-    for(const auto &child : mContainedBoxes) {
+    const auto minMax = getContainedMinMax();
+    for(int i = minMax.fMin; i <= minMax.fMax; i++) {
+        const auto& child = mContainedBoxes.at(i);
         if(range.isUnary()) return range;
         auto childRange = child->prp_getIdenticalRelRange(
                     child->prp_absFrameToRelFrame(absFrame));
@@ -652,10 +662,6 @@ bool ContainerBox::isCurrentGroup() const {
 
 bool ContainerBox::isFlipBook() const {
     return mFlipBook->getValue();
-}
-
-FlipBookProperty* ContainerBox::flipBook() const {
-    return mFlipBook.get();
 }
 
 void ContainerBox::updateContainedBoxes() {
@@ -1459,8 +1465,8 @@ void ContainerBox::writeBoxOrSoundXEV(const stdsptr<XevZipFileSaver>& xevFileSav
 #include "internallinkcanvas.h"
 #include "internallinkbox.h"
 #include "customboxcreator.h"
-#include "sculptpathbox.h"
 #include "svglinkbox.h"
+#include "nullobject.h"
 
 qsptr<BoundingBox> createBoxOfNonCustomType(const eBoxType type) {
     switch(type) {
@@ -1492,8 +1498,9 @@ qsptr<BoundingBox> createBoxOfNonCustomType(const eBoxType type) {
             return enve::make_shared<SvgLinkBox>();
         case(eBoxType::internalLinkCanvas):
             return enve::make_shared<InternalLinkCanvas>(nullptr, false);
-        case(eBoxType::sculptPath):
-            return enve::make_shared<SculptPathBox>();
+        case(eBoxType::nullObject):
+            return enve::make_shared<NullObject>();
+        case(eBoxType::deprecated0): break;
         case(eBoxType::canvas) : break;
         case(eBoxType::count) : break;
         case(eBoxType::custom): break;
@@ -1502,6 +1509,7 @@ qsptr<BoundingBox> createBoxOfNonCustomType(const eBoxType type) {
 }
 
 void ContainerBox::readAllContainedXEV(
+        XevReadBoxesHandler& boxReadHandler,
         ZipFileLoader& fileLoader, const QString& path,
         const RuntimeIdToWriteId& objListIdConv) {
     fileLoader.process(path + "stack.xml", [&](QIODevice* const src) {
@@ -1562,15 +1570,17 @@ void ContainerBox::readAllContainedXEV(
     const QString childPath = path + "objects/%1/";
     int id = 0;
     for(const auto& cont : mContained) {
-        cont->readBoxOrSoundXEV(fileLoader, childPath.arg(id++), objListIdConv);
+        cont->readBoxOrSoundXEV(boxReadHandler, fileLoader,
+                                childPath.arg(id++), objListIdConv);
     }
 }
 
 void ContainerBox::readBoxOrSoundXEV(
+        XevReadBoxesHandler& boxReadHandler,
         ZipFileLoader& fileLoader, const QString& path,
         const RuntimeIdToWriteId& objListIdConv) {
-    BoundingBox::readBoxOrSoundXEV(fileLoader, path, objListIdConv);
-    readAllContainedXEV(fileLoader, path, objListIdConv);
+    BoundingBox::readBoxOrSoundXEV(boxReadHandler, fileLoader, path, objListIdConv);
+    readAllContainedXEV(boxReadHandler, fileLoader, path, objListIdConv);
 }
 
 void ContainerBox::writeBoundingBox(eWriteStream& dst) const {

@@ -32,41 +32,23 @@ public:
 
     QIcon icon(const QFileInfo & info) const {
         const QString name = info.fileName();
-        if(name.endsWith(".ev")) return mEvIcon;
+        if(name.endsWith(".ev") ||
+           name.endsWith(".xev")) return mEvIcon;
         return QFileIconProvider::icon(info);
     }
 private:
     QIcon mEvIcon;
 };
 
-class evFileFilterProxyModel : public QSortFilterProxyModel {
-public:
-    evFileFilterProxyModel(QObject* parent) :
-        QSortFilterProxyModel(parent)
-    { mProvider = new evIconProvider; }
-    ~evFileFilterProxyModel()
-    { delete mProvider; }
-protected:
-    bool filterAcceptsRow(int sourceRow, const QModelIndex& sourceParent) const {
-        Q_UNUSED(sourceRow)
-        Q_UNUSED(sourceParent)
-        const auto fileModel = qobject_cast<QFileSystemModel*>(sourceModel());
-        fileModel->setIconProvider(mProvider);
-        return true;
-    }
-private:
-    evIconProvider * mProvider;
-};
-
-
 QString eDialogs::openFile(const QString &title,
                            const QString &path,
                            const QString &filter) {
 
     QFileDialog dialog(nullptr, title, path);
-    dialog.setOption(QFileDialog::DontUseNativeDialog);
+    // dialog.setOption(QFileDialog::DontUseNativeDialog);
     dialog.setNameFilter(filter);
-    dialog.setProxyModel(new evFileFilterProxyModel(&dialog));
+    auto iconProvider = new evIconProvider;
+    dialog.setIconProvider(iconProvider);
     if(dialog.exec()) {
         const QStringList paths = dialog.selectedFiles();
         const QString openPath(paths.isEmpty() ? "" : paths.first());
@@ -79,20 +61,22 @@ QStringList eDialogs::openFiles(const QString &title,
                                 const QString &path,
                                 const QString &filter) {
     QFileDialog dialog(nullptr, title, path);
-    dialog.setOption(QFileDialog::DontUseNativeDialog);
+    // dialog.setOption(QFileDialog::DontUseNativeDialog);
     dialog.setFileMode(QFileDialog::ExistingFiles);
     dialog.setNameFilter(filter);
-    dialog.setProxyModel(new evFileFilterProxyModel(&dialog));
+    auto iconProvider = new evIconProvider;
+    dialog.setIconProvider(iconProvider);
     if(dialog.exec()) return dialog.selectedFiles();
     return QStringList();
 }
 
 QString eDialogs::openDir(const QString &title, const QString &path) {
     QFileDialog dialog(nullptr, title, path);
-    dialog.setOption(QFileDialog::DontUseNativeDialog);
+    // dialog.setOption(QFileDialog::DontUseNativeDialog);
     dialog.setFileMode(QFileDialog::Directory);
     dialog.setOption(QFileDialog::ShowDirsOnly);
-    dialog.setProxyModel(new evFileFilterProxyModel(&dialog));
+    auto iconProvider = new evIconProvider;
+    dialog.setIconProvider(iconProvider);
     if(dialog.exec()) {
         const QStringList paths = dialog.selectedFiles();
         const QString openPath(paths.isEmpty() ? "" : paths.first());
@@ -104,12 +88,13 @@ QString eDialogs::openDir(const QString &title, const QString &path) {
 QString eDialogs::saveFile(const QString &title,
                            const QString &path,
                            const QString &filter) {
-
     QFileDialog dialog(nullptr, title, path);
-    dialog.setOption(QFileDialog::DontUseNativeDialog);
+    dialog.setAcceptMode(QFileDialog::AcceptSave);
+    // dialog.setOption(QFileDialog::DontUseNativeDialog);
     dialog.setFileMode(QFileDialog::AnyFile);
     dialog.setNameFilter(filter);
-    dialog.setProxyModel(new evFileFilterProxyModel(&dialog));
+    auto iconProvider = new evIconProvider;
+    dialog.setIconProvider(iconProvider);
     if(dialog.exec()) {
         const QStringList paths = dialog.selectedFiles();
         const QString openPath(paths.isEmpty() ? "" : paths.first());

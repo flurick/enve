@@ -70,17 +70,17 @@ void generateButtons(const int minWidgetDim, const int buttonDim) {
 
     QImage uncheckedBase(buttonSize, QImage::Format_ARGB32);
     uncheckedBase.fill(Qt::transparent);
-    renderSvg(":/icons/toolbarButtons/uncheckedBg", uncheckedBase);
+    renderSvg(":/icons/toolbarButtons/uncheckedBg.svg", uncheckedBase);
 
     QImage checkedBase(buttonSize, QImage::Format_ARGB32);
     checkedBase.fill(Qt::transparent);
-    renderSvg(":/icons/toolbarButtons/checkedBg", checkedBase);
+    renderSvg(":/icons/toolbarButtons/checkedBg.svg", checkedBase);
 
     const QString dir = eSettings::sSettingsDir() + "/" + mkPath;
     QDirIterator checkableIt(":/icons/toolbarButtons/checkable");
     while(checkableIt.hasNext()) {
         const auto path = checkableIt.next();
-        const auto fileName = checkableIt.fileName();
+        const auto fileName = checkableIt.fileName().chopped(4);
         const auto pngFileName = fileName + ".png";
 
         if(fileName.contains("Checked")) {
@@ -98,19 +98,45 @@ void generateButtons(const int minWidgetDim, const int buttonDim) {
     QDirIterator plainIt(":/icons/toolbarButtons/plain");
     while(plainIt.hasNext()) {
         const auto path = plainIt.next();
-        const auto fileName = plainIt.fileName();
+        const auto fileName = plainIt.fileName().chopped(4);;
         generate(path, uncheckedBase, dir + "/" + fileName + ".png");
     }
 }
 
 void IconLoader::generateAll(const int minWidgetDim, const int buttonDim) {
+    const QString minDimStr = QString::number(minWidgetDim);
     const QDir eDir(eSettings::sSettingsDir());
     QDir iconsDir(eSettings::sSettingsDir() + "/icons");
 #ifdef QT_DEBUG
     iconsDir.removeRecursively();
 #endif
-    const QString mkPath = "icons/" + QString::number(minWidgetDim);
+    const QString mkPath = "icons/" + minDimStr;
     if(!eDir.mkpath(mkPath)) RuntimeThrow("Failed to mkpath '" + mkPath + "'");
+    QDir iconsSizeDir(eSettings::sIconsDir());
+
+    const int enveIconsVersion = 0;
+    QFile verFile(iconsSizeDir.filePath("ver"));
+    bool removeIcons = false;
+    if(!verFile.exists()) {
+        removeIcons = true;
+    } else {
+        const auto verData = verFile.readAll();
+        const int foundVersion = verData.toInt();
+        if(enveIconsVersion != foundVersion) {
+            removeIcons = true;
+        }
+    }
+    if(removeIcons) {
+        iconsSizeDir.removeRecursively();
+        if(!eDir.mkpath(mkPath)) RuntimeThrow("Failed to mkpath '" + mkPath + "'");
+    }
+
+    if(verFile.open(QIODevice::WriteOnly)) {
+        const auto verIntData = reinterpret_cast<const char*>(&enveIconsVersion);
+        const auto verData = QByteArray::fromRawData(verIntData, sizeof(int));
+        verFile.write(verData);
+        verFile.close();
+    }
 
     QDirIterator noInterIt(":/icons/noInterpolation");
     while(noInterIt.hasNext()) {
@@ -120,15 +146,15 @@ void IconLoader::generateAll(const int minWidgetDim, const int buttonDim) {
         int targetWidth = qCeil(img.width()*minWidgetDim/22.);
         if(qAbs(targetWidth - img.width()) % 2 == 1) targetWidth--;
         const auto scaled = img.scaledToWidth(targetWidth, Qt::TransformationMode::SmoothTransformation);
-        scaled.save(iconsDir.filePath(QString::number(minWidgetDim) + "/" + fileName));
+        scaled.save(iconsSizeDir.filePath(fileName));
     }
 
     QDirIterator baseIt(":/icons");
     while(baseIt.hasNext()) {
         const auto path = baseIt.next();
         if(baseIt.fileInfo().isDir()) continue;
-        const auto fileName = baseIt.fileName();
-        const auto pngPath = iconsDir.filePath(QString::number(minWidgetDim) + "/" + fileName + ".png");
+        const auto fileName = baseIt.fileName().chopped(4);
+        const auto pngPath = iconsSizeDir.filePath(fileName + ".png");
         generate(path, minWidgetDim/22., pngPath);
     }
     generateButtons(minWidgetDim, buttonDim);

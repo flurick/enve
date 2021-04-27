@@ -47,8 +47,8 @@ public:
 
     SkBlendMode getBlendMode() const override;
 
-    QMatrix getRelativeTransformAtFrame(const qreal relFrame) override;
-    QMatrix getTotalTransformAtFrame(const qreal relFrame) override;
+    QMatrix getRelativeTransformAtFrame(const qreal relFrame) const override;
+    QMatrix getTotalTransformAtFrame(const qreal relFrame) const override;
 
     bool isFrameInDurationRect(const int relFrame) const override;
     bool isFrameFInDurationRect(const qreal relFrame) const override;
@@ -64,11 +64,14 @@ public:
             QList<BlendEffect::Delayed> &delayed) const override;
 
     void saveSVG(SvgExporter& exp, DomEleTask* const task) const override;
+
+    qreal getOpacity(const qreal relFrame) const override;
+
+    BoxT *getFinalTarget() const;
 protected:
     ConnContext& assignLinkTarget(BoxT * const linkTarget);
     BoxT *getLinkTarget() const
     { return mLinkTarget; }
-    BoxT *getFinalTarget() const;
 
     const qsptr<BoxTargetProperty> mBoxTarget =
             enve::make_shared<BoxTargetProperty>("link target");
@@ -78,6 +81,16 @@ private:
 };
 
 #define ILBB InternalLinkBoxBase<BoxT>
+
+template <typename BoxT>
+qreal ILBB::getOpacity(const qreal relFrame) const {
+    const auto linkTarget = getLinkTarget();
+    if(mInnerLink && linkTarget) {
+        return linkTarget->getOpacity(relFrame);
+    } else {
+        return BoundingBox::getOpacity(relFrame);
+    }
+}
 
 template <typename BoxT>
 bool ILBB::relPointInsidePath(const QPointF &relPos) const {
@@ -148,7 +161,7 @@ bool ILBB::isFrameFInDurationRect(const qreal relFrame) const {
 }
 
 template <typename BoxT>
-QMatrix ILBB::getRelativeTransformAtFrame(const qreal relFrame) {
+QMatrix ILBB::getRelativeTransformAtFrame(const qreal relFrame) const {
     if(mInnerLink) {
         const auto linkTarget = getLinkTarget();
         if(!linkTarget) return QMatrix();
@@ -159,7 +172,7 @@ QMatrix ILBB::getRelativeTransformAtFrame(const qreal relFrame) {
 }
 
 template <typename BoxT>
-QMatrix ILBB::getTotalTransformAtFrame(const qreal relFrame) {
+QMatrix ILBB::getTotalTransformAtFrame(const qreal relFrame) const {
     if(mInnerLink) {
         const auto parentGroup = this->getParentGroup();
         const auto linkTarget = getLinkTarget();
@@ -219,6 +232,7 @@ stdsptr<BoxRenderData> ILBB::createRenderData() {
     const auto linkTarget = getLinkTarget();
     if(!linkTarget) return nullptr;
     const auto renderData = linkTarget->createRenderData();
+    if(!renderData) return nullptr;
     renderData->fParentBox = this;
     if(!mInnerLink) renderData->fBlendEffectIdentifier = this;
     return renderData;

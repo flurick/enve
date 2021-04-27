@@ -111,10 +111,17 @@ MainWindow::MainWindow(Document& document,
     setWindowIcon(QIcon(iconDir + "/enve.png"));
     const auto downArr = iconDir + "/down-arrow.png";
     const auto upArr = iconDir + "/up-arrow.png";
+    const auto dockClose = iconDir + "/dockClose.png";
+    const auto dockMaximize = iconDir + "/dockMaximize.png";
+
     const QString iconSS =
-            "QComboBox::down-arrow { image: url(" + downArr + "); }" +
-            "QScrollBar::sub-line { image: url(" + upArr + "); }" +
-            "QScrollBar::add-line { image: url(" + downArr + "); }";
+            "QComboBox::down-arrow { image: url(" + downArr + "); }"
+            "QScrollBar::sub-line { image: url(" + upArr + "); }"
+            "QScrollBar::add-line { image: url(" + downArr + "); }"
+            "QDockWidget {"
+                "titlebar-close-icon: url(" + dockClose + ");"
+                "titlebar-normal-icon: url(" + dockMaximize + ");"
+            "}";
 
     QFile customSS(eSettings::sSettingsDir() + "/stylesheet.qss");
     if(customSS.exists()) {
@@ -515,14 +522,6 @@ void MainWindow::setupMenuBar() {
 
     {
         const auto qAct = mPathMenu->addAction(
-                    tr("Object to Sculpted Path", "MenuBar_Path"));
-        mActions.objectsToSculptedPathAction->connect(qAct);
-    }
-
-    mPathMenu->addSeparator();
-
-    {
-        const auto qAct = mPathMenu->addAction(
                     tr("Union", "MenuBar_Path"));
         qAct->setShortcut(Qt::CTRL + Qt::Key_Plus);
         mActions.pathsUnionAction->connect(qAct);
@@ -843,7 +842,6 @@ void MainWindow::updateSettingsForCurrentCanvas(Canvas* const scene) {
 #include <QSpacerItem>
 void MainWindow::setupStatusBar() {
     mUsageWidget = new UsageWidget(this);
-    mUsageWidget->setStyleSheet("QStatusBar { border-top: 1px solid black; }");
     setStatusBar(mUsageWidget);
 }
 
@@ -911,11 +909,11 @@ void MainWindow::setupToolBar() {
 
     mToolBar->addSeparator();
 
-    mSculptMode = SwitchButton::sCreate2Switch(
-                "toolbarButtons/sculptUnchecked.png",
-                "toolbarButtons/sculptChecked.png",
-                gSingleLineTooltip(tr("Sculpt Path Mode", "ToolBar"), "F9"), this);
-    mToolBar->addWidget(mSculptMode);
+    mNullMode = SwitchButton::sCreate2Switch(
+                "toolbarButtons/nullCreateUnchecked.png",
+                "toolbarButtons/nullCreateChecked.png",
+                gSingleLineTooltip(tr("Add Null Object Mode", "ToolBar"), "F9"), this);
+    mToolBar->addWidget(mNullMode);
 
     mPickPaintSettingsMode = SwitchButton::sCreate2Switch(
                 "toolbarButtons/pickUnchecked.png",
@@ -1006,8 +1004,8 @@ void MainWindow::connectToolBarActions() {
     connect(mTextMode, &ActionButton::pressed,
             &mActions, &Actions::setTextMode);
 
-    connect(mSculptMode, &ActionButton::pressed,
-            &mActions, &Actions::setSculptMode);
+    connect(mNullMode, &ActionButton::pressed,
+            &mActions, &Actions::setNullMode);
     connect(mPickPaintSettingsMode, &ActionButton::pressed,
             &mActions, &Actions::setPickPaintSettingsMode);
 
@@ -1063,7 +1061,7 @@ void MainWindow::updateCanvasModeButtonsChecked() {
     mRectangleMode->setState(mode == CanvasMode::rectCreate);
     mTextMode->setState(mode == CanvasMode::textCreate);
 
-    mSculptMode->setState(mode == CanvasMode::sculptPath);
+    mNullMode->setState(mode == CanvasMode::nullCreate);
     mPickPaintSettingsMode->setState(mode == CanvasMode::pickFillStroke);
 
     const bool boxMode = mode == CanvasMode::boxTransform;
@@ -1211,7 +1209,7 @@ bool handleCanvasModeKeyPress(Document& document, const int key) {
     } else if(key == Qt::Key_F8) {
         document.setCanvasMode(CanvasMode::textCreate);
     } else if(key == Qt::Key_F9) {
-        document.setCanvasMode(CanvasMode::sculptPath);
+        document.setCanvasMode(CanvasMode::nullCreate);
     } else if(key == Qt::Key_F10) {
         document.setCanvasMode(CanvasMode::pickFillStroke);
     } else return false;

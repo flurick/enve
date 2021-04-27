@@ -65,16 +65,16 @@ AnimationDockWidget::AnimationDockWidget(QWidget *parent,
             keysView, &KeysView::graphResetValueScaleAndMinShownAction);
 
     const auto valueLines = SwitchButton::sCreate2Switch(
-                                "toolbarButtons/horizontalLinesOn.png",
-                                "toolbarButtons/horizontalLinesOff.png",
-                                gSingleLineTooltip("Disable Value Lines"),
+                                "toolbarButtons/horizontalLinesChecked.png",
+                                "toolbarButtons/horizontalLinesUnchecked.png",
+                                gSingleLineTooltip("Show/Hide Value Lines"),
                                 this);
     connect(valueLines, &SwitchButton::toggled,
             keysView, &KeysView::graphSetValueLinesDisabled);
 
     const auto selectedVisible = SwitchButton::sCreate2Switch(
-                                     "toolbarButtons/notOnlySelectedVisible.png",
-                                     "toolbarButtons/onlySelectedVisible.png",
+                                     "toolbarButtons/onlySelectedVisibleUnchecked.png",
+                                     "toolbarButtons/onlySelectedVisibleChecked.png",
                                      gSingleLineTooltip("View Only Selected Objects' Properties"),
                                      this);
     connect(selectedVisible, &SwitchButton::toggled,
@@ -93,9 +93,9 @@ AnimationDockWidget::AnimationDockWidget(QWidget *parent,
     addWidget(selectedVisible);
 
     setStyleSheet("QToolBar {"
-                      "border: 1px solid black;"
                       "padding: 10px;"
-                      "margin-bottom: -1px"
+                      "margin-bottom: -1px;"
+                      "border: 3px solid rgb(25, 25, 25);"
                   "}");
 }
 

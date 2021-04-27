@@ -26,6 +26,9 @@ namespace EvFormat {
         readSceneSettingsBeforeContent = 20,
         relativeFilePathSave = 21,
         flipBook = 22,
+        colorizeInfluence = 23,
+        transformEffects = 24,
+        transformEffects2 = 25,
 
         nextVersion
     };

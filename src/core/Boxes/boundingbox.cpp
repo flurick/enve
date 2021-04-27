@@ -40,13 +40,13 @@
 #include "Animators/customproperties.h"
 #include "GUI/propertynamedialog.h"
 #include "BlendEffects/blendeffectcollection.h"
+#include "TransformEffects/transformeffectcollection.h"
 #include "GUI/dialogsinterface.h"
 #include "svgexporter.h"
 #include "svgexporthelpers.h"
 
 int BoundingBox::sNextDocumentId = 0;
 QList<BoundingBox*> BoundingBox::sDocumentBoxes;
-QList<BoundingBox*> BoundingBox::sReadBoxes;
 int BoundingBox::sNextWriteId;
 QList<const BoundingBox*> BoundingBox::sBoxesWithWriteIds;
 
@@ -55,12 +55,15 @@ BoundingBox::BoundingBox(const QString& name, const eBoxType type) :
     mDocumentId(sNextDocumentId++), mType(type),
     mCustomProperties(enve::make_shared<CustomProperties>()),
     mBlendEffectCollection(enve::make_shared<BlendEffectCollection>()),
+    mTransformEffectCollection(enve::make_shared<TransformEffectCollection>()),
     mTransformAnimator(enve::make_shared<BoxTransformAnimator>()),
     mRasterEffectsAnimators(enve::make_shared<RasterEffectCollection>()) {
     sDocumentBoxes << this;
 
     ca_addChild(mCustomProperties);
     mCustomProperties->SWT_setVisible(false);
+
+    mTransformAnimator->ca_addChild(mTransformEffectCollection);
 
     ca_addChild(mBlendEffectCollection);
     mBlendEffectCollection->SWT_hide();
@@ -104,16 +107,22 @@ void BoundingBox::readBoundingBox(eReadStream& src) {
         QString name; src >> name;
         prp_setName(name);
     }
-    src >> mReadId;
+    int readId; src >> readId;
     src.read(&mBlendMode, sizeof(SkBlendMode));
 
-    BoundingBox::sAddReadBox(this);
+    src.addReadBox(readId, this);
 }
 
-void BoundingBox::prp_readPropertyXEV_impl(const QDomElement& ele, const XevImporter& imp) {
+qreal BoundingBox::getOpacity(const qreal relFrame) const {
+    return mTransformAnimator->getOpacity(relFrame);
+}
+
+void BoundingBox::prp_readPropertyXEV_impl(const QDomElement& ele,
+                                           const XevImporter& imp) {
     const auto readIdStr = ele.attribute("id");
-    mReadId = XmlExportHelpers::stringToInt(readIdStr);
-    BoundingBox::sAddReadBox(this);
+    const int readId = XmlExportHelpers::stringToInt(readIdStr);
+    auto& handler = imp.getXevReadBoxesHandler();
+    handler.addReadBox(readId, this);
 
     eBoxOrSound::prp_readPropertyXEV_impl(ele, imp);
 }
@@ -282,7 +291,7 @@ NormalSegment BoundingBox::getNormalSegment(const QPointF &absPos,
 
 void BoundingBox::drawPixmapSk(SkCanvas * const canvas,
                                const SkFilterQuality filter) const {
-    const qreal opacity = mTransformAnimator->getOpacity();
+    const qreal opacity = getOpacity(anim_getCurrentRelFrame());
     if(isZero4Dec(opacity) || !mVisibleInScene) return;
     mDrawRenderContainer.drawSk(canvas, filter);
 }
@@ -293,6 +302,27 @@ bool BoundingBox::blendEffectsEnabled() const {
 
 bool BoundingBox::hasBlendEffects() const {
     return mBlendEffectCollection->ca_hasChildren();
+}
+
+void BoundingBox::applyTransformEffects(
+        const qreal relFrame,
+        qreal& pivotX, qreal& pivotY,
+        qreal& posX, qreal& posY,
+        qreal& rot,
+        qreal& scaleX, qreal& scaleY,
+        qreal& shearX, qreal& shearY,
+        QMatrix& postTransform) {
+    mTransformEffectCollection->applyEffects(relFrame,
+                                             pivotX, pivotY,
+                                             posX, posY,
+                                             rot,
+                                             scaleX, scaleY,
+                                             shearX, shearY,
+                                             postTransform, this);
+}
+
+bool BoundingBox::hasTransformEffects() const {
+    return mTransformEffectCollection->ca_hasChildren();
 }
 
 ContainerBox *BoundingBox::getFirstParentLayer() const {
@@ -433,6 +463,14 @@ QPointF BoundingBox::getPivotAbsPos() {
     return mTransformAnimator->getPivotAbs();
 }
 
+QPointF BoundingBox::getPivotRelPos(const qreal relFrame) {
+    return mTransformAnimator->getPivot(relFrame);
+}
+
+QPointF BoundingBox::getPivotAbsPos(const qreal relFrame) {
+    return mTransformAnimator->getPivotAbs(relFrame);
+}
+
 void BoundingBox::setRelBoundingRect(const QRectF& relRect) {
     mRelRect = relRect;
     mRelRectSk = toSkRect(mRelRect);
@@ -519,6 +557,7 @@ stdsptr<BoxRenderData> BoundingBox::createRenderData(const qreal relFrame) {
 
 BoxRenderData *BoundingBox::updateCurrentRenderData(const qreal relFrame) {
     const auto renderData = createRenderData(relFrame);
+    if(!renderData) return nullptr;
     mRenderDataHandler.addItemAtRelFrame(renderData);
     return renderData.get();
 }
@@ -648,7 +687,7 @@ QMatrix BoundingBox::getTotalTransform() const {
     return mTransformAnimator->getTotalTransform();
 }
 
-QMatrix BoundingBox::getRelativeTransformAtCurrentFrame() {
+QMatrix BoundingBox::getRelativeTransformAtCurrentFrame() const {
     return getRelativeTransformAtFrame(anim_getCurrentRelFrame());
 }
 
@@ -829,7 +868,7 @@ void BoundingBox::setupWithoutRasterEffects(const qreal relFrame,
     data->fResolution = scene->getResolution();
     data->fResolutionScale.reset();
     data->fResolutionScale.scale(data->fResolution, data->fResolution);
-    data->fOpacity = mTransformAnimator->getOpacity(relFrame);
+    data->fOpacity = getOpacity(relFrame);
     data->fBaseMargin = QMargins() + 2;
     data->fBlendMode = getBlendMode();
 
@@ -946,19 +985,19 @@ void BoundingBox::removeRasterEffect(const qsptr<RasterEffect> &effect) {
 //    }
 //}
 
-QMatrix BoundingBox::getRelativeTransformAtFrame(const qreal relFrame) {
+QMatrix BoundingBox::getRelativeTransformAtFrame(const qreal relFrame) const {
     if(isZero6Dec(relFrame - anim_getCurrentRelFrame()))
         return mTransformAnimator->getRelativeTransform();
     return mTransformAnimator->getRelativeTransformAtFrame(relFrame);
 }
 
-QMatrix BoundingBox::getInheritedTransformAtFrame(const qreal relFrame) {
+QMatrix BoundingBox::getInheritedTransformAtFrame(const qreal relFrame) const {
     if(isZero6Dec(relFrame - anim_getCurrentRelFrame()))
         return mTransformAnimator->getInheritedTransform();
     return mTransformAnimator->getInheritedTransformAtFrame(relFrame);
 }
 
-QMatrix BoundingBox::getTotalTransformAtFrame(const qreal relFrame) {
+QMatrix BoundingBox::getTotalTransformAtFrame(const qreal relFrame) const {
     if(isZero6Dec(relFrame - anim_getCurrentRelFrame()))
         return mTransformAnimator->getTotalTransform();
     return mTransformAnimator->getTotalTransformAtFrame(relFrame);
@@ -1107,10 +1146,6 @@ void BoundingBox::writeIdentifier(eWriteStream &dst) const {
     dst.write(&mType, sizeof(eBoxType));
 }
 
-int BoundingBox::getReadId() const {
-    return mReadId;
-}
-
 int BoundingBox::getWriteId() const {
     if(mWriteId < 0) assignWriteId();
     return mWriteId;
@@ -1122,23 +1157,8 @@ int BoundingBox::assignWriteId() const {
     return mWriteId;
 }
 
-void BoundingBox::clearReadId() const {
-    mReadId = -1;
-}
-
 void BoundingBox::clearWriteId() const {
     mWriteId = -1;
-}
-
-BoundingBox *BoundingBox::sGetBoxByReadId(const int readId) {
-    for(const auto& box : sReadBoxes) {
-        if(box->getReadId() == readId) return box;
-    }
-    return nullptr;
-}
-
-void BoundingBox::sAddReadBox(BoundingBox * const box) {
-    sReadBoxes << box;
 }
 
 void BoundingBox::sClearWriteBoxes() {
@@ -1150,18 +1170,6 @@ void BoundingBox::sClearWriteBoxes() {
 }
 
 #include "simpletask.h"
-void BoundingBox::sClearReadBoxes() {
-    SimpleTask::sSchedule([]() {
-        for(const auto& box : sReadBoxes) {
-            box->clearReadId();
-        }
-        sReadBoxes.clear();
-    });
-}
-
-void BoundingBox::sForEveryReadBox(const std::function<void(BoundingBox*)> &func) {
-    for(const auto& box : sReadBoxes) func(box);
-}
 
 void BoundingBox::selectAndAddContainedPointsToList(
         const QRectF &absRect,

@@ -18,6 +18,7 @@
 #include "CacheHandlers/hddcachablecachehandler.h"
 #include "GUI/global.h"
 #include "Boxes/boundingbox.h"
+#include "Private/esettings.h"
 
 TimelineMovable::TimelineMovable(const Type type, Property &parentProp) :
     mType(type), mParentProperty(parentProp) {}
@@ -86,6 +87,24 @@ void TimelineMovable::finishPosTransform() {
     mParentProperty.prp_addUndoRedo(ur);
 }
 
+void TimelineMovable::selectionChangeTriggered(const bool shiftPressed) {
+    if(const auto cont = enve_cast<eBoxOrSound*>(&mParentProperty)) {
+        cont->selectionChangeTriggered(shiftPressed);
+    }
+}
+
+bool TimelineMovable::isSelected() {
+    if(const auto cont = enve_cast<eBoxOrSound*>(&mParentProperty)) {
+        return cont->isSelected();
+    }
+    return false;
+}
+
+void TimelineMovable::setClamp(const int min, const int max) {
+    setClampMin(min);
+    setClampMax(max);
+}
+
 void TimelineMovable::setClampMax(const int max) {
     mClampMax = max;
 }
@@ -118,19 +137,6 @@ DurationRectangle::DurationRectangle(Property &parentProp) :
             this, &DurationRectangle::minRelFrameChanged);
     connect(&mMaxFrame, &TimelineMovable::valueChanged,
             this, &DurationRectangle::maxRelFrameChanged);
-}
-
-void DurationRectangle::selectionChangeTriggered(const bool shiftPressed) {
-    if(const auto cont = enve_cast<eBoxOrSound*>(&mParentProperty)) {
-        cont->selectionChangeTriggered(shiftPressed);
-    }
-}
-
-bool DurationRectangle::isSelected() {
-    if(const auto cont = enve_cast<eBoxOrSound*>(&mParentProperty)) {
-        return cont->isSelected();
-    }
-    return false;
 }
 
 void DurationRectangle::setFramesDuration(const int duration) {
@@ -221,8 +227,9 @@ void DurationRectangle::draw(QPainter * const p,
     }
 
     QColor fillColor;
-    if(isSelected()) fillColor = QColor(50, 50, 255, 120);
-    else fillColor = QColor(0, 0, 255, 120);
+    const auto& sett = eSettings::instance();
+    if(isSelected()) fillColor = sett.fSelectedVisibilityRangeColor;
+    else fillColor = sett.fVisibilityRangeColor;
 
     p->fillRect(durRect.adjusted(0, 1, 0, -1), fillColor);
     if(mHovered) {

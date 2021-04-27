@@ -1,4 +1,4 @@
-// enve - 2D animations software
+﻿// enve - 2D animations software
 // Copyright (C) 2016-2020 Maurycy Liebner
 
 // This program is free software: you can redistribute it and/or modify
@@ -34,10 +34,10 @@ protected:
     BasicTransformAnimator();
 public:
     virtual void reset();
-    virtual QMatrix getCurrentTransform();
-    virtual QMatrix getRelativeTransformAtFrame(const qreal relFrame);
-    virtual QMatrix getInheritedTransformAtFrame(const qreal relFrame);
-    virtual QMatrix getTotalTransformAtFrame(const qreal relFrame);
+    virtual QMatrix getRelativeTransformAtFrame(
+            const qreal relFrame, QMatrix* postTransform = nullptr) const;
+    virtual QMatrix getInheritedTransformAtFrame(const qreal relFrame) const;
+    virtual QMatrix getTotalTransformAtFrame(const qreal relFrame) const;
 
     FrameRange prp_getIdenticalRelRange(const int relFrame) const;
 
@@ -54,8 +54,6 @@ public:
     void startScaleTransform();
 
     void setRelativePos(const QPointF &relPos);
-    void setAbsolutePos(const QPointF &pos);
-    void moveToAbs(const QPointF &absPos);
     void moveByAbs(const QPointF &absTrans);
 
     void rotateRelativeToSavedValue(const qreal rotRel);
@@ -94,8 +92,6 @@ public:
 
     void setParentTransformAnimator(BasicTransformAnimator *parent);
 
-    QMatrix getParentTotalTransformAtRelFrame(const qreal relFrame);
-
     QPointFAnimator *getPosAnimator() const;
     QPointFAnimator *getScaleAnimator() const;
     QrealAnimator *getRotAnimator() const;
@@ -105,6 +101,7 @@ protected:
     QList<qsptr<BasicTransformAnimator>> mChildBoxes;
 
     QMatrix mRelTransform;
+    QMatrix mPostTransform;
     QMatrix mInheritedTransform;
     QMatrix mTotalTransform;
 
@@ -113,21 +110,29 @@ protected:
     qsptr<QPointFAnimator> mPosAnimator;
     qsptr<QPointFAnimator> mScaleAnimator;
     qsptr<QrealAnimator> mRotAnimator;
+private:
+    bool rotationFlipped() const;
 signals:
     void totalTransformChanged(const UpdateReason);
+    void inheritedTransformChanged(const UpdateReason);
 };
 
 class CORE_EXPORT AdvancedTransformAnimator : public BasicTransformAnimator {
     e_OBJECT
 protected:
     AdvancedTransformAnimator();
-
-    QDomElement prp_writePropertyXEV_impl(const XevExporter& exp) const;
-    void prp_readPropertyXEV_impl(const QDomElement& ele, const XevImporter& imp);
 public:
     void reset();
-    QMatrix getRelativeTransformAtFrame(const qreal relFrame);
-    QMatrix getCurrentTransform();
+    QMatrix getRelativeTransformAtFrame(
+            const qreal relFrame, QMatrix* postTransform = nullptr) const;
+
+    void applyTransformEffects(const qreal relFrame,
+                               qreal& pivotX, qreal& pivotY,
+                               qreal& posX, qreal& posY,
+                               qreal& rot,
+                               qreal& scaleX, qreal& scaleY,
+                               qreal& shearX, qreal& shearY,
+                               QMatrix& postTransform) const;
 
     void setValues(const TransformValues& values);
 
@@ -139,6 +144,7 @@ public:
     void resetPivot();
     void setPivotFixedTransform(const QPointF &newPivot);
 
+    QPointF getPivot(const qreal relFrame);
     QPointF getPivot();
     qreal getPivotX();
     qreal getPivotY();
@@ -157,6 +163,7 @@ public:
 
     void finishPivotTransform();
     QPointF getPivotAbs();
+    QPointF getPivotAbs(const qreal relFrame);
 
     qreal getOpacity(const qreal relFrame);
 

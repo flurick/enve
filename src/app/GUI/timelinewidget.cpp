@@ -170,23 +170,15 @@ TimelineWidget::TimelineWidget(Document &document,
     connect(mGraphAct, &QAction::toggled,
             this, &TimelineWidget::setGraphEnabled);
 
-    mCornerMenuBar->setStyleSheet("QWidget#menuBarWidget {"
-                                      "border-right: 1px solid black;"
-                                  "}");
     mCornerMenuBar->setContentsMargins(0, 0, 1, 0);
 
     mSearchLine = new QLineEdit("", mBoxesListMenuBar);
     mSearchLine->setMinimumHeight(0);
     mSearchLine->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
     MainWindow::sGetInstance()->installLineFilter(mSearchLine);
-    mSearchLine->setStyleSheet("background-color: white;"
-                               "color: black;"
-                               "border-radius: 0;"
-                               "border: 0;"
-                               "border-right: 1px solid black;"
-                               "border-left: 1px solid black;"
-                               "border-bottom: 1px solid black;"
-                               "margin: 0;");
+    mSearchLine->setStyleSheet("border-radius: 0;"
+                               "border: 0;");
+    mSearchLine->setPlaceholderText("search");
     connect(mSearchLine, &QLineEdit::textChanged,
             this, &TimelineWidget::setSearchText);
     mSearchLine->setFocusPolicy(Qt::ClickFocus);
@@ -398,10 +390,11 @@ void TimelineWidget::readState(eReadStream &src) {
         setTarget(target);
     }
 
-    SimpleTask::sScheduleContexted(this, [this, sceneReadId, sceneDocumentId]() {
-        BoundingBox* sceneBox = nullptr;;
+    src.addReadStreamDoneTask([this, sceneReadId, sceneDocumentId]
+                              (eReadStream& src) {
+        BoundingBox* sceneBox = nullptr;
         if(sceneReadId != -1)
-            sceneBox = BoundingBox::sGetBoxByReadId(sceneReadId);
+            sceneBox = src.getBoxByReadId(sceneReadId);
         if(!sceneBox && sceneDocumentId != -1)
             sceneBox = BoundingBox::sGetBoxByDocumentId(sceneDocumentId);
 
@@ -417,7 +410,8 @@ void TimelineWidget::readState(eReadStream &src) {
     setViewedFrameRange({minViewedFrame, maxViewedFrame});
 }
 
-void TimelineWidget::readStateXEV(const QDomElement& ele,
+void TimelineWidget::readStateXEV(XevReadBoxesHandler& boxReadHandler,
+                                  const QDomElement& ele,
                                   RuntimeIdToWriteId& objListIdConv) {
     objListIdConv.assign(mBoxesListWidget->getId());
 
@@ -441,8 +435,9 @@ void TimelineWidget::readStateXEV(const QDomElement& ele,
     const auto sceneIdStr = ele.attribute("sceneId");
     const int sceneId = XmlExportHelpers::stringToInt(sceneIdStr);
 
-    SimpleTask::sScheduleContexted(this, [this, sceneId]() {
-        const auto sceneBox = BoundingBox::sGetBoxByReadId(sceneId);
+    boxReadHandler.addXevImporterDoneTask(
+                [this, sceneId](const XevReadBoxesHandler& imp) {
+        const auto sceneBox = imp.getBoxByReadId(sceneId);
         const auto scene = enve_cast<Canvas*>(sceneBox);
         setCurrentScene(scene);
     });

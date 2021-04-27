@@ -35,6 +35,8 @@
 #include "transformvalues.h"
 #include "regexhelpers.h"
 
+#define RGXS REGEX_SPACES
+
 class TextSvgAttributes {
 public:
     TextSvgAttributes() {}
@@ -207,9 +209,9 @@ void extractSvgAttributes(const QString &string,
 
 
 bool toColor(const QString &colorStr, QColor &color) {
-    QRegExp rx = QRegExp("rgb\\(.*\\)", Qt::CaseInsensitive);
+    QRegExp rx = QRegExp(RGXS "rgb\\(.*\\)" RGXS, Qt::CaseInsensitive);
     if(rx.exactMatch(colorStr)) {
-        rx = QRegExp("rgb\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)", Qt::CaseInsensitive);
+        rx = QRegExp(RGXS "rgb\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)" RGXS, Qt::CaseInsensitive);
         if(rx.exactMatch(colorStr)) {
             rx.indexIn(colorStr);
             QStringList intRGB = rx.capturedTexts();
@@ -217,7 +219,7 @@ bool toColor(const QString &colorStr, QColor &color) {
                          intRGB.at(2).toInt(),
                          intRGB.at(3).toInt());
         } else {
-            rx = QRegExp("rgb\\(\\s*(\\d+)\\s*%\\s*,\\s*(\\d+)\\s*%\\s*,\\s*(\\d+)\\s*%\\s*\\)", Qt::CaseInsensitive);
+            rx = QRegExp(RGXS "rgb\\(\\s*(\\d+)\\s*%\\s*,\\s*(\\d+)\\s*%\\s*,\\s*(\\d+)\\s*%\\s*\\)" RGXS, Qt::CaseInsensitive);
             rx.indexIn(colorStr);
             QStringList intRGB = rx.capturedTexts();
             color.setRgbF(intRGB.at(1).toInt()/100.,
@@ -226,7 +228,7 @@ bool toColor(const QString &colorStr, QColor &color) {
 
         }
     } else {
-        rx = QRegExp("#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})", Qt::CaseInsensitive);
+        rx = QRegExp(RGXS "#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})" RGXS, Qt::CaseInsensitive);
         if(rx.exactMatch(colorStr)) {
             color = QColor(colorStr);
         } else {
@@ -350,7 +352,8 @@ static void parseNumbersArray(const QChar *&str,
 }
 
 bool parsePolylineData(const QString &dataStr,
-                       VectorPathSvgAttributes &attributes) {
+                       VectorPathSvgAttributes &attributes,
+                       const bool isPolygon) {
     float x0 = 0, y0 = 0;              // starting point
     float x = 0, y = 0;                // current point
     const QChar *str = dataStr.constData();
@@ -389,6 +392,7 @@ bool parsePolylineData(const QString &dataStr,
                 path.lineTo({x, y});
             }
         }
+        if(isPolygon) path.close();
     }
     return true;
 }
@@ -437,9 +441,10 @@ void loadVectorPath(const QDomElement &pathElement,
 
 void loadPolyline(const QDomElement &pathElement,
                   ContainerBox *parentGroup,
-                  VectorPathSvgAttributes &attributes) {
+                  VectorPathSvgAttributes &attributes,
+                  const bool isPolygon) {
     const QString pathStr = pathElement.attribute("points");
-    parsePolylineData(pathStr, attributes);
+    parsePolylineData(pathStr, attributes, isPolygon);
     if(attributes.isEmpty()) return;
     const auto vectorPath = enve::make_shared<SmartVectorPath>();
     vectorPath->planCenterPivotPosition();
@@ -531,7 +536,7 @@ void loadText(const QDomElement &pathElement,
 }
 
 bool extractTranslation(const QString& str, QMatrix& target) {
-    const QRegExp rx1("translate\\(" REGEX_SINGLE_FLOAT "\\)",
+    const QRegExp rx1(RGXS "translate\\(" REGEX_SINGLE_FLOAT "\\)" RGXS,
                       Qt::CaseInsensitive);
     if(rx1.exactMatch(str)) {
         rx1.indexIn(str);
@@ -540,7 +545,7 @@ bool extractTranslation(const QString& str, QMatrix& target) {
         return true;
     }
 
-    const QRegExp rx2("translate\\(" REGEX_TWO_FLOATS "\\)",
+    const QRegExp rx2(RGXS "translate\\(" REGEX_TWO_FLOATS "\\)" RGXS,
                       Qt::CaseInsensitive);
     if(rx2.exactMatch(str)) {
         rx2.indexIn(str);
@@ -555,7 +560,7 @@ bool extractTranslation(const QString& str, QMatrix& target) {
 
 
 bool extractScale(const QString& str, QMatrix& target) {
-    const QRegExp rx1("scale\\(" REGEX_SINGLE_FLOAT "\\)",
+    const QRegExp rx1(RGXS "scale\\(" REGEX_SINGLE_FLOAT "\\)" RGXS,
                       Qt::CaseInsensitive);
     if(rx1.exactMatch(str)) {
         rx1.indexIn(str);
@@ -565,7 +570,7 @@ bool extractScale(const QString& str, QMatrix& target) {
         return true;
     }
 
-    const QRegExp rx2("scale\\(" REGEX_TWO_FLOATS "\\)",
+    const QRegExp rx2(RGXS "scale\\(" REGEX_TWO_FLOATS "\\)" RGXS,
                       Qt::CaseInsensitive);
     if(rx2.exactMatch(str)) {
         rx2.indexIn(str);
@@ -579,7 +584,7 @@ bool extractScale(const QString& str, QMatrix& target) {
 }
 
 bool extractRotate(const QString& str, QMatrix& target) {
-    const QRegExp rx5("rotate\\(" REGEX_SINGLE_FLOAT "\\)",
+    const QRegExp rx5(RGXS "rotate\\(" REGEX_SINGLE_FLOAT "\\)" RGXS,
                       Qt::CaseInsensitive);
     if(rx5.exactMatch(str)) {
         rx5.indexIn(str);
@@ -591,14 +596,14 @@ bool extractRotate(const QString& str, QMatrix& target) {
 }
 
 bool extractWholeMatrix(const QString& str, QMatrix& target) {
-    const QRegExp rx("matrix\\("
+    const QRegExp rx(RGXS "matrix\\("
                          REGEX_FIRST_FLOAT
                          REGEX_INNER_FLOAT
                          REGEX_INNER_FLOAT
                          REGEX_INNER_FLOAT
                          REGEX_INNER_FLOAT
                          REGEX_LAST_FLOAT
-                     "\\)", Qt::CaseInsensitive);
+                     "\\)" RGXS, Qt::CaseInsensitive);
     if(rx.exactMatch(str)) {
         rx.indexIn(str);
         const QStringList capturedTxt = rx.capturedTexts();
@@ -655,20 +660,32 @@ void loadElement(const QDomElement &element, ContainerBox *parentGroup,
                 if(!iNode.isElement()) continue;
                 const QDomElement elem = iNode.toElement();
                 if(elem.tagName() != "stop") continue;
-                QColor stopColor;
+                QString stopColorS;
+                QString stopOpacityS;
                 const QString stopStyle = elem.attribute("style");
                 QList<SvgAttribute> attributesList;
                 extractSvgAttributes(stopStyle, &attributesList);
                 for(const auto& attr : attributesList) {
                     if(attr.fName == "stop-color") {
-                        const qreal alpha = stopColor.alphaF();
-                        toColor(attr.fValue, stopColor);
-                        stopColor.setAlphaF(alpha);
+                        stopColorS = attr.fValue;
 
                     } else if(attr.fName == "stop-opacity") {
-                        stopColor.setAlphaF(toDouble(attr.fValue));
+                        stopOpacityS = attr.fValue;
                     }
                 }
+                if(stopColorS.isEmpty()) {
+                    stopColorS = elem.attribute("stop-color");
+                }
+                if(stopOpacityS.isEmpty()) {
+                    stopOpacityS = elem.attribute("stop-opacity");
+                }
+
+                QColor stopColor;
+                toColor(stopColorS, stopColor);
+                if(!stopOpacityS.isEmpty()) {
+                    stopColor.setAlphaF(toDouble(stopOpacityS));
+                }
+
                 gradient->addColor(stopColor);
             }
         } else {
@@ -703,14 +720,16 @@ void loadElement(const QDomElement &element, ContainerBox *parentGroup,
                                toDouble(x2), toDouble(y2),
                                trans});
     }
-    if(tagName == "path" || tagName == "polyline") {
+    if(tagName == "path" || tagName == "polyline" || tagName == "polygon") {
         VectorPathSvgAttributes attributes;
         attributes.setParent(parentGroupAttributes);
         attributes.loadBoundingBoxAttributes(element);
         if(tagName == "path") {
             loadVectorPath(element, parentGroup, attributes);
-        } else { // if(tagName == "polyline") {
-            loadPolyline(element, parentGroup, attributes);
+        } else if(tagName == "polyline") {
+            loadPolyline(element, parentGroup, attributes, false);
+        } else if(tagName == "polygon") {
+            loadPolyline(element, parentGroup, attributes, true);
         }
     } else if(tagName == "g" || tagName == "text" ||
               tagName == "circle" || tagName == "ellipse" ||
@@ -730,11 +749,11 @@ void loadElement(const QDomElement &element, ContainerBox *parentGroup,
         } else if(tagName == "tspan") {
             loadText(element, parentGroup, attributes);
         }
-    }
+    } else qDebug() << "Unrecognized tagName \"" + tagName + "\"";
 }
 
 bool getUrlId(const QString &urlStr, QString *id) {
-    const QRegExp rx = QRegExp("url\\(\\s*#(.*)\\)", Qt::CaseInsensitive);
+    const QRegExp rx = QRegExp(RGXS "url\\(\\s*#(.*)\\)" RGXS, Qt::CaseInsensitive);
     if(rx.exactMatch(urlStr)) {
         rx.indexIn(urlStr);
         const QStringList capturedTxt = rx.capturedTexts();
@@ -747,7 +766,7 @@ bool getUrlId(const QString &urlStr, QString *id) {
 
 bool getGradientFromString(const QString &colorStr,
                            FillSvgAttributes * const target) {
-    const QRegExp rx = QRegExp("url\\(\\s*(.*)\\s*\\)", Qt::CaseInsensitive);
+    const QRegExp rx = QRegExp(RGXS "url\\(\\s*(.*)\\s*\\)" RGXS, Qt::CaseInsensitive);
     if(rx.exactMatch(colorStr)) {
         const QStringList capturedTxt = rx.capturedTexts();
         QString id = capturedTxt.at(1);
@@ -957,7 +976,6 @@ void BoxSvgAttributes::loadBoundingBoxAttributes(const QDomElement &element) {
         case 'i':
             if(name == "id") mId = value;
             break;
-
         case 'o':
             if(name == "opacity") {
                 mOpacity = toDouble(value)*100.;
@@ -1042,6 +1060,8 @@ void BoxSvgAttributes::loadBoundingBoxAttributes(const QDomElement &element) {
             break;
         }
     }
+
+    mId = element.attribute("id", mId);
 
     const QString fillAttributesStr = element.attribute("fill");
     if(!fillAttributesStr.isEmpty()) setFillAttribute(fillAttributesStr);
@@ -1170,6 +1190,7 @@ void StrokeSvgAttributes::apply(BoundingBox *box, const qreal scale) const {
 }
 
 void BoxSvgAttributes::apply(BoundingBox *box) const {
+    if(!mId.isEmpty()) box->prp_setName(mId);
     if(const auto path = enve_cast<PathBox*>(box)) {
         const qreal m11 = mRelTransform.m11();
         const qreal m12 = mRelTransform.m12();

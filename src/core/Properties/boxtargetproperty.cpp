@@ -29,6 +29,8 @@ BoundingBox* BoxTargetProperty::getTarget() const {
 
 void BoxTargetProperty::setTargetAction(BoundingBox* const box) {
     if(box == mTarget_d) return;
+    const auto oldValue = mTarget_d.get();
+    emit setActionStarted(oldValue, box);
     {
         prp_pushUndoRedoName("Set Box Target");
         UndoRedo ur;
@@ -44,6 +46,7 @@ void BoxTargetProperty::setTargetAction(BoundingBox* const box) {
     }
 
     setTarget(box);
+    emit setActionFinished(oldValue, box);
 }
 
 void BoxTargetProperty::setTarget(BoundingBox* const box) {
@@ -67,14 +70,21 @@ bool BoxTargetProperty::SWT_dropSupport(const QMimeData * const data) {
     if(!eMimeData::sHasType<BoundingBox>(data)) return false;
     const auto eData = static_cast<const eMimeData*>(data);
     const auto bData = static_cast<const eDraggedObjects*>(eData);
-    return bData->count() == 1;
+    const auto objs = bData->getObjects<BoundingBox>();
+    if(objs.count() != 1) return false;
+    const auto obj = objs.first();
+    if(mValidator && !mValidator(obj)) return false;
+    const auto parentBox = getFirstAncestor<BoundingBox>();
+    if(parentBox == obj) return false;
+    return true;
 }
 
 bool BoxTargetProperty::SWT_drop(const QMimeData * const data) {
+    if(!SWT_dropSupport(data)) return false;
     const auto eData = static_cast<const eMimeData*>(data);
     const auto bData = static_cast<const eDraggedObjects*>(eData);
-    const auto obj = bData->getObject<BoundingBox>(0);
-    setTargetAction(obj);
+    const auto objs = bData->getObjects<BoundingBox>();
+    setTargetAction(objs.first());
     return true;
 }
 
@@ -96,11 +106,12 @@ void BoxTargetProperty::prp_readProperty_impl(eReadStream& src) {
     src >> targetReadId;
     int targetDocumentId;
     src >> targetDocumentId;
-    if(targetReadId == -1 || targetDocumentId == -1) return;
-    SimpleTask::sScheduleContexted(this, [this, targetReadId, targetDocumentId]() {
+    if(targetReadId == -1 && targetDocumentId == -1) return;
+    src.addReadStreamDoneTask([this, targetReadId, targetDocumentId]
+                              (eReadStream& src) {
         BoundingBox* targetBox = nullptr;
         if(targetReadId != -1)
-            targetBox = BoundingBox::sGetBoxByReadId(targetReadId);
+            targetBox = src.getBoxByReadId(targetReadId);
          if(!targetBox && targetDocumentId != -1)
              targetBox = BoundingBox::sGetBoxByDocumentId(targetDocumentId);
          setTarget(targetBox);
@@ -119,11 +130,11 @@ QDomElement BoxTargetProperty::prp_writePropertyXEV_impl(const XevExporter& exp)
 
 void BoxTargetProperty::prp_readPropertyXEV_impl(
         const QDomElement& ele, const XevImporter& imp) {
-    Q_UNUSED(imp)
     const int targetId = XmlExportHelpers::stringToInt(ele.attribute("targetId"));
     if(targetId == -1) return;
-    SimpleTask::sScheduleContexted(this, [this, targetId]() {
-        const auto targetObj = BoundingBox::sGetBoxByReadId(targetId);
+    auto& handler = imp.getXevReadBoxesHandler();
+    handler.addXevImporterDoneTask([this, targetId](const XevReadBoxesHandler& imp) {
+        const auto targetObj = imp.getBoxByReadId(targetId);
         if(targetObj) setTarget(targetObj);
     });
 }

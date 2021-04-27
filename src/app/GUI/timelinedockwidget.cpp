@@ -92,13 +92,21 @@ TimelineDockWidget::TimelineDockWidget(Document& document,
         renderPreview();
     });
 
-    mPlayButton = SwitchButton::sCreate2Switch("toolbarButtons/play.png",
-                                               "toolbarButtons/pause.png",
-                                               gSingleLineTooltip("Render Preview", "Space"), this);
+    mPlayButton = SwitchButton::sCreate2Switch(
+                      "toolbarButtons/play.png",
+                      "toolbarButtons/pause.png",
+                      gSingleLineTooltip("Render Preview", "Space"), this);
     mStopButton = new ActionButton("toolbarButtons/stop.png",
                                    gSingleLineTooltip("Stop Preview", "Esc"), this);
     connect(mStopButton, &ActionButton::pressed,
             this, &TimelineDockWidget::interruptPreview);
+
+    mLoopButton = SwitchButton::sCreate2Switch(
+                      "toolbarButtons/loopUnchecked.png",
+                      "toolbarButtons/loopChecked.png",
+                      gSingleLineTooltip("Loop"), this);
+    connect(mLoopButton, &SwitchButton::toggled,
+            this, &TimelineDockWidget::setLoop);
 
     mLocalPivot = SwitchButton::sCreate2Switch(
                 "toolbarButtons/pivotGlobal.png", "toolbarButtons/pivotLocal.png",
@@ -258,13 +266,6 @@ TimelineDockWidget::TimelineDockWidget(Document& document,
         mPaintCropMode->setState(mode != PaintMode::crop);
     });
 
-    mSculptNodeVisibility = SwitchButton::sCreate2Switch(
-                "toolbarButtons/sculptNodesVisible.png",
-                "toolbarButtons/sculptNodesHidden.png",
-                gSingleLineTooltip("Sculpt Node Visibility"), this);
-    connect(mSculptNodeVisibility, &SwitchButton::toggled,
-            &mDocument, &Document::setSculptNodesHidden);
-
     mToolBar = new QToolBar(this);
     mToolBar->setMovable(false);
 
@@ -286,6 +287,8 @@ TimelineDockWidget::TimelineDockWidget(Document& document,
     mToolBar->addWidget(mPlayFromBeginningButton);
     mToolBar->addWidget(mPlayButton);
     mToolBar->addWidget(mStopButton);
+    mToolBar->addSeparator();
+    mToolBar->addWidget(mLoopButton);
 
     addSpaceToToolbar()->setText("     ");
 
@@ -301,13 +304,10 @@ TimelineDockWidget::TimelineDockWidget(Document& document,
     brushColorWidget->layout()->addWidget(mColorLabel);
 
     mBrushColorWidgetAct = mToolBar->addWidget(brushColorWidget);
-    setupSculptBrushColorLabel();
     addSpaceToToolbar();
     mDecBrushSizeAct = mToolBar->addWidget(mDecBrushSize);
     mBrushSizeLabelAct = mToolBar->addWidget(mBrushSizeLabel);
     mIncBrushSizeAct = mToolBar->addWidget(mIncBrushSize);
-
-    setupSculptBrushSizeButtons();
 
     addSpaceToToolbar();
 
@@ -325,13 +325,6 @@ TimelineDockWidget::TimelineDockWidget(Document& document,
     mPaintMoveModeAct = mToolBar->addWidget(mPaintMoveMode);
     mPaintCropModeAct = mToolBar->addWidget(mPaintCropMode);
 
-    mSculptNodeVisibilityAct = mToolBar->addWidget(mSculptNodeVisibility);
-    mSculptModeNodeVisibilitySpace = addSpaceToToolbar();
-
-    setupSculptModeButtons();
-    mSculptModeTargetSeperator = mToolBar->addSeparator();
-    setupSculptTargetButtons();
-    setupSculptValueSpins();
     setupDrawPathSpins();
 
     mColorLabel->setObjectName("colorLabel");
@@ -384,14 +377,6 @@ TimelineDockWidget::TimelineDockWidget(Document& document,
 
     setBrush(nullptr);
     setBrushColor(Qt::black);
-    setSculptBrushColor(Qt::black);
-
-    connect(&mDocument, &Document::sculptModeChanged,
-            this, &TimelineDockWidget::sculptModeChanged);
-    sculptModeChanged();
-    connect(&mDocument, &Document::sculptTargetChanged,
-            this, &TimelineDockWidget::sculptTargetChanged);
-    sculptTargetChanged();
 }
 
 QAction* TimelineDockWidget::addSpaceToToolbar() {
@@ -399,158 +384,6 @@ QAction* TimelineDockWidget::addSpaceToToolbar() {
     const auto spaceWidget = mToolBar->widgetForAction(spaceAct);
     spaceWidget->setObjectName("emptyToolButton");
     return spaceAct;
-}
-
-void TimelineDockWidget::setupSculptBrushColorLabel() {
-    mSculptColorLabel = new TriggerLabel("");
-    mSculptColorLabel->setObjectName("colorLabel");
-    mSculptColorLabel->setToolTip(gSingleLineTooltip("Current Color", "E"));
-    connect(mSculptColorLabel, &TriggerLabel::requestContextMenu,
-            this, [this](const QPoint& pos) {
-        QMenu menu(this);
-        menu.addAction("Bookmark");
-        const auto act = menu.exec(pos);
-        if(act) {
-            if(act->text() == "Bookmark") {
-                const QColor& col = mDocument.fBrushColor;
-                Document::sInstance->addBookmarkColor(col);
-            }
-        }
-    });
-    connect(mSculptColorLabel, &TriggerLabel::triggered, this, [this]() {
-        mMainWindow->toggleFillStrokeSettingsDockVisible();
-    });
-
-    connect(&mDocument, &Document::brushColorChanged,
-            this, &TimelineDockWidget::setSculptBrushColor);
-
-    mSculptColorLabelAct = mToolBar->addWidget(mSculptColorLabel);
-}
-
-void TimelineDockWidget::setupSculptBrushSizeButtons() {
-    mDecSculptBrushSize = new ActionButton(
-                "toolbarButtons/brush-.png",
-                gSingleLineTooltip("Decrease Brush Size", "Q"), this);
-    connect(mDecSculptBrushSize, &ActionButton::pressed,
-            &mDocument, &Document::decSculptBrushRadius);
-    mDecSculptBrushSizeAct = mToolBar->addWidget(mDecSculptBrushSize);
-
-    mSculptBrushSizeLabel = new QLabel("0");
-    mSculptBrushSizeLabel->setAlignment(Qt::AlignCenter);
-    connect(&mDocument, &Document::sculptBrushSizeChanged,
-            this, [this](const qreal size) {
-        mSculptBrushSizeLabel->setText(QString("%1").arg(size, 0, 'f', 2));
-    });
-    mDocument.incSculptBrushRadius();
-    eSizesUI::widget.add(mSculptBrushSizeLabel, [this](const int size) {
-        mSculptBrushSizeLabel->setFixedWidth(2*size);
-    });
-    mSculptBrushSizeLabelAct = mToolBar->addWidget(mSculptBrushSizeLabel);
-
-    mIncSculptBrushSize = new ActionButton(
-                "toolbarButtons/brush+.png",
-                gSingleLineTooltip("Increase Brush Size", "W"), this);
-    connect(mIncSculptBrushSize, &ActionButton::pressed,
-            &mDocument, &Document::incSculptBrushRadius);
-    mIncSculptBrushSizeAct = mToolBar->addWidget(mIncSculptBrushSize);
-}
-
-void TimelineDockWidget::setupSculptModeButtons() {
-    mDragMode = SwitchButton::sCreate2Switch(
-                "toolbarButtons/sculptx-Unchecked.png",
-                "toolbarButtons/sculptx-Checked.png",
-                gSingleLineTooltip("Drag Shape"), this);
-    connect(mDragMode, &SwitchButton::toggled,
-            &mDocument, [this] {
-        mDocument.setSculptMode(SculptMode::drag);
-    });
-    mDragModeAct = mToolBar->addWidget(mDragMode);
-
-    mAddMode = SwitchButton::sCreate2Switch(
-                "toolbarButtons/sculpt+Unchecked.png",
-                "toolbarButtons/sculpt+Checked.png",
-                gSingleLineTooltip("Add Value"), this);
-    connect(mAddMode, &SwitchButton::toggled,
-            &mDocument, [this] {
-        mDocument.setSculptMode(SculptMode::add);
-    });
-    mAddModeAct = mToolBar->addWidget(mAddMode);
-
-    mReplaceMode = SwitchButton::sCreate2Switch(
-                "toolbarButtons/sculpt=Unchecked.png",
-                "toolbarButtons/sculpt=Checked.png",
-                gSingleLineTooltip("Replace Value"), this);
-    connect(mReplaceMode, &SwitchButton::toggled,
-            &mDocument, [this] {
-        mDocument.setSculptMode(SculptMode::replace);
-    });
-    mReplaceModeAct = mToolBar->addWidget(mReplaceMode);
-
-    mSubtractMode = SwitchButton::sCreate2Switch(
-                "toolbarButtons/sculpt-Unchecked.png",
-                "toolbarButtons/sculpt-Checked.png",
-                gSingleLineTooltip("Subtract Value"), this);
-    connect(mSubtractMode, &SwitchButton::toggled,
-            &mDocument, [this] {
-        mDocument.setSculptMode(SculptMode::subtract);
-    });
-    mSubtractModeAct = mToolBar->addWidget(mSubtractMode);
-}
-
-void TimelineDockWidget::setupSculptTargetButtons() {
-    mPositionTarget = SwitchButton::sCreate2Switch(
-                "toolbarButtons/positionUnchecked.png",
-                "toolbarButtons/positionChecked.png",
-                gSingleLineTooltip("Position Target"), this);
-    connect(mPositionTarget, &SwitchButton::toggled, &mDocument, [this] {
-        mDocument.setSculptTarget(SculptTarget::position);
-    });
-    mPositionTargetAct = mToolBar->addWidget(mPositionTarget);
-
-    mWidthTarget = SwitchButton::sCreate2Switch(
-                "toolbarButtons/widthUnchecked.png",
-                "toolbarButtons/widthChecked.png",
-                gSingleLineTooltip("Width Target"), this);
-    connect(mWidthTarget, &SwitchButton::toggled, &mDocument, [this] {
-        mDocument.setSculptTarget(SculptTarget::width);
-    });
-    mWidthTargetAct = mToolBar->addWidget(mWidthTarget);
-
-    mPressureTarget = SwitchButton::sCreate2Switch(
-                "toolbarButtons/pressureUnchecked.png",
-                "toolbarButtons/pressureChecked.png",
-                gSingleLineTooltip("Pressure Target"), this);
-    connect(mPressureTarget, &SwitchButton::toggled, &mDocument, [this] {
-        mDocument.setSculptTarget(SculptTarget::pressure);
-    });
-    mPressureTargetAct = mToolBar->addWidget(mPressureTarget);
-
-    mSpacingTarget = SwitchButton::sCreate2Switch(
-                "toolbarButtons/spacingUnchecked.png",
-                "toolbarButtons/spacingChecked.png",
-                gSingleLineTooltip("Spacing Target"), this);
-    connect(mSpacingTarget, &SwitchButton::toggled, &mDocument, [this] {
-        mDocument.setSculptTarget(SculptTarget::spacing);
-    });
-    mSpacingTargetAct = mToolBar->addWidget(mSpacingTarget);
-
-    mTimeTarget = SwitchButton::sCreate2Switch(
-                "toolbarButtons/timeUnchecked.png",
-                "toolbarButtons/timeChecked.png",
-                gSingleLineTooltip("Time Target"), this);
-    connect(mTimeTarget, &SwitchButton::toggled, &mDocument, [this] {
-        mDocument.setSculptTarget(SculptTarget::time);
-    });
-    mTimeTargetAct = mToolBar->addWidget(mTimeTarget);
-
-    mColorTarget = SwitchButton::sCreate2Switch(
-                "toolbarButtons/colorUnchecked.png",
-                "toolbarButtons/colorChecked.png",
-                gSingleLineTooltip("Color Target"), this);
-    connect(mColorTarget, &SwitchButton::toggled, &mDocument, [this] {
-        mDocument.setSculptTarget(SculptTarget::color);
-    });
-    mColorTargetAct = mToolBar->addWidget(mColorTarget);
 }
 
 QAction* addSlider(const QString& name,
@@ -565,39 +398,6 @@ QAction* addSlider(const QString& name,
     layout->addWidget(label);
     layout->addWidget(slider);
     return toolBar->addWidget(widget);
-}
-
-void TimelineDockWidget::setupSculptValueSpins() {
-    mSculptSpace0 = addSpaceToToolbar();
-
-    mValue = new QDoubleSlider(0, 1, 0.1, this);
-    mValue->setDisplayedValue(mDocument.fSculptBrush.value());
-    connect(mValue, &QDoubleSlider::valueEdited,
-            this, [this](const qreal value) {
-        mDocument.fSculptBrush.setValue(value);
-    });
-    mValueAct = addSlider("value", mValue, mToolBar);
-
-    mSculptSpace1 = addSpaceToToolbar();
-
-    mHardness = new QDoubleSlider(0, 1, 0.1, this);
-    mHardness->setDisplayedValue(mDocument.fSculptBrush.hardness());
-    connect(mHardness, &QDoubleSlider::valueEdited,
-            this, [this](const qreal value) {
-        mDocument.fSculptBrush.setHardness(value);
-    });
-    mHardnessAct = addSlider("hardness", mHardness, mToolBar);
-
-
-    mSculptSpace2 = addSpaceToToolbar();
-
-    mOpacity = new QDoubleSlider(0, 1, 0.1, this);
-    mOpacity->setDisplayedValue(mDocument.fSculptBrush.opacity());
-    connect(mOpacity, &QDoubleSlider::valueEdited,
-            this, [this](const qreal value) {
-        mDocument.fSculptBrush.setOpacity(value);
-    });
-    mOpacityAct = addSlider("opacity", mOpacity, mToolBar);
 }
 
 void TimelineDockWidget::setupDrawPathSpins() {
@@ -632,41 +432,14 @@ void TimelineDockWidget::setupDrawPathSpins() {
     mDrawPathSmoothAct = addSlider("smooth", mDrawPathSmooth, mToolBar);
 }
 
-void TimelineDockWidget::updateSculptPositionEnabled() {
-    const SculptMode mode = mDocument.fSculptMode;
-    const SculptTarget target = mDocument.fSculptTarget;
-    mPositionTarget->setEnabled(target != SculptTarget::position ||
-                                (mode == SculptMode::drag ||
-                                 mode == SculptMode::replace ||
-                                 mode == SculptMode::add));
-}
-
-void TimelineDockWidget::sculptTargetChanged() {
-    const SculptTarget target = mDocument.fSculptTarget;
-    mPositionTarget->setState(target == SculptTarget::position);
-    mWidthTarget->setState(target == SculptTarget::width);
-    mPressureTarget->setState(target == SculptTarget::pressure);
-    mSpacingTarget->setState(target == SculptTarget::spacing);
-    mTimeTarget->setState(target == SculptTarget::time);
-    mColorTarget->setState(target == SculptTarget::color);
-
-    updateSculptPositionEnabled();
-}
-
-void TimelineDockWidget::sculptModeChanged() {
-    const SculptMode mode = mDocument.fSculptMode;
-    mDragMode->setState(mode == SculptMode::drag);
-    mAddMode->setState(mode == SculptMode::add);
-    mReplaceMode->setState(mode == SculptMode::replace);
-    mSubtractMode->setState(mode == SculptMode::subtract);
-
-    updateSculptPositionEnabled();
-}
-
 void TimelineDockWidget::setResolutionText(QString text) {
     text = text.remove(" %");
     const qreal res = clamp(text.toDouble(), 1, 200)/100;
     mMainWindow->setResolutionValue(res);
+}
+
+void TimelineDockWidget::setLoop(const bool loop) {
+    RenderHandler::sInstance->setLoop(loop);
 }
 
 void TimelineDockWidget::clearAll() {
@@ -793,38 +566,6 @@ void TimelineDockWidget::updateButtonsVisibility(const CanvasMode mode) {
     mPaintMoveModeAct->setVisible(paintMode);
     mPaintCropModeAct->setVisible(paintMode);
 
-    const bool sculptMode = mode == CanvasMode::sculptPath;
-    mSculptColorLabelAct->setVisible(sculptMode);
-
-    mDecSculptBrushSizeAct->setVisible(sculptMode);
-    mSculptBrushSizeLabelAct->setVisible(sculptMode);
-    mIncSculptBrushSizeAct->setVisible(sculptMode);
-
-    mSculptNodeVisibilityAct->setVisible(sculptMode);
-    mSculptModeNodeVisibilitySpace->setVisible(sculptMode);
-
-    mDragModeAct->setVisible(sculptMode);
-    mAddModeAct->setVisible(sculptMode);
-    mReplaceModeAct->setVisible(sculptMode);
-    mSubtractModeAct->setVisible(sculptMode);
-
-    mSculptModeTargetSeperator->setVisible(sculptMode);
-
-    mPositionTargetAct->setVisible(sculptMode);
-    mWidthTargetAct->setVisible(sculptMode);
-    mPressureTargetAct->setVisible(sculptMode);
-    mSpacingTargetAct->setVisible(sculptMode);
-    mTimeTargetAct->setVisible(sculptMode);
-    mColorTargetAct->setVisible(sculptMode);
-
-    mSculptSpace0->setVisible(sculptMode);
-
-    mValueAct->setVisible(sculptMode);
-    mSculptSpace1->setVisible(sculptMode);
-    mHardnessAct->setVisible(sculptMode);
-    mSculptSpace2->setVisible(sculptMode);
-    mOpacityAct->setVisible(sculptMode);
-
     const bool drawPathMode = mode == CanvasMode::drawPath;
     mDrawPathAutoAct->setVisible(drawPathMode);
     mDrawPathMaxErrorAct->setVisible(drawPathMode);
@@ -850,10 +591,6 @@ void setSomeBrushColor(const int height,
 
 void TimelineDockWidget::setBrushColor(const QColor &color) {
     setSomeBrushColor(mToolBar->height(), mColorLabel, color);
-}
-
-void TimelineDockWidget::setSculptBrushColor(const QColor &color) {
-    setSomeBrushColor(mToolBar->height(), mSculptColorLabel, color);
 }
 
 void TimelineDockWidget::setBrush(BrushContexedWrapper* const brush) {

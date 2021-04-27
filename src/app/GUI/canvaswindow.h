@@ -23,7 +23,7 @@
 #include "keyfocustarget.h"
 #include "smartPointers/ememory.h"
 #include "canvas.h"
-#include "Animators/SculptPath/sculptbrush.h"
+
 class Brush;
 class WindowSingleWidgetTarget;
 enum class ColorMode : short;
@@ -80,7 +80,8 @@ public:
     void writeState(eWriteStream& dst) const;
     void readState(eReadStream& src);
 
-    void readStateXEV(const QDomElement& ele);
+    void readStateXEV(XevReadBoxesHandler& boxReadHandler,
+                      const QDomElement& ele);
     void writeStateXEV(QDomElement& ele, QDomDocument& doc) const;
 protected:
     bool event(QEvent *e);
@@ -108,7 +109,6 @@ protected:
 private:
     void setCanvasMode(const CanvasMode mode);
     void updatePaintModeCursor();
-    void updateSculptModeCursor();
 
     Document& mDocument;
     Actions& mActions;
@@ -118,8 +118,6 @@ private:
     QPointF mPrevMousePos;
     QPointF mPrevPressPos;
     bool mValidPaintTarget = false;
-
-    bool mValidSculptTarget = false;
 
     bool mBlockInput = false;
     bool mMouseGrabber = false;
@@ -142,7 +140,7 @@ private:
     bool handleGroupChangeKeyPress(QKeyEvent *event);
     bool handleResetTransformKeyPress(QKeyEvent *event);
     bool handleRevertPathKeyPress(QKeyEvent *event);
-    bool handleStartTransformKeyPress(const KeyEvent &e);
+    bool handleStartTransformKeyPress(const eKeyEvent &e);
     bool handleSelectAllKeyPress(QKeyEvent *event);
     bool handleShiftKeysKeyPress(QKeyEvent *event);    
 signals:

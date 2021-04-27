@@ -35,9 +35,10 @@
 #include "Animators/transformanimator.h"
 #include "glhelpers.h"
 #include "Private/document.h"
-#include "Boxes/sculptpathbox.h"
 #include "svgexporter.h"
 #include "ReadWrite/evformat.h"
+#include "eevent.h"
+#include "Boxes/nullobject.h"
 
 Canvas::Canvas(Document &document,
                const int canvasWidth, const int canvasHeight,
@@ -98,13 +99,6 @@ void Canvas::setCurrentGroupParentAsCurrentGroup() {
     setCurrentBoxesGroup(mCurrentContainer->getParentGroup());
 }
 
-bool Canvas::hasValidSculptTarget() const {
-    for(const auto& box : mSelectedBoxes) {
-        if(enve_cast<SculptPathBox*>(box)) return true;
-    }
-    return false;
-}
-
 void Canvas::queTasks() {
     if(Actions::sInstance->smoothChange() && mCurrentContainer) {
         if(!mDrawnSinceQue) return;
@@ -150,15 +144,15 @@ void Canvas::setCurrentBoxesGroup(ContainerBox * const group) {
     emit currentContainerSet(group);
 }
 
-void Canvas::updateHoveredBox(const MouseEvent& e) {
+void Canvas::updateHoveredBox(const eMouseEvent& e) {
     mHoveredBox = mCurrentContainer->getBoxAt(e.fPos);
 }
 
-void Canvas::updateHoveredPoint(const MouseEvent& e) {
+void Canvas::updateHoveredPoint(const eMouseEvent& e) {
     mHoveredPoint_d = getPointAtAbsPos(e.fPos, mCurrentMode, 1/e.fScale);
 }
 
-void Canvas::updateHoveredEdge(const MouseEvent& e) {
+void Canvas::updateHoveredEdge(const eMouseEvent& e) {
     if(mCurrentMode != CanvasMode::pointTransform || mHoveredPoint_d)
         return mHoveredNormalSegment.clear();
     mHoveredNormalSegment = getSegment(e);
@@ -176,7 +170,7 @@ bool Canvas::getPivotLocal() const {
     return mDocument.fLocalPivot;
 }
 
-void Canvas::updateHovered(const MouseEvent& e) {
+void Canvas::updateHovered(const eMouseEvent& e) {
     updateHoveredPoint(e);
     updateHoveredEdge(e);
     updateHoveredBox(e);
@@ -281,6 +275,11 @@ void Canvas::renderSk(SkCanvas * const canvas,
             canvas->save();
             iBox->drawBoundingRect(canvas, invZoom);
             iBox->drawAllCanvasControls(canvas, mCurrentMode, invZoom, ctrlPressed);
+            canvas->restore();
+        }
+        for(const auto obj : mNullObjects) {
+            canvas->save();
+            obj->drawNullObject(canvas, mCurrentMode, invZoom, ctrlPressed);
             canvas->restore();
         }
     }
@@ -602,7 +601,7 @@ void Canvas::updatePaintBox() {
     }
 }
 
-bool Canvas::handlePaintModeKeyPress(const KeyEvent &e) {
+bool Canvas::handlePaintModeKeyPress(const eKeyEvent &e) {
     if(mCurrentMode != CanvasMode::paint) return false;
     if(e.fKey == Qt::Key_N && mPaintTarget.isValid()) {
         newEmptyPaintFrameAction();
@@ -610,7 +609,7 @@ bool Canvas::handlePaintModeKeyPress(const KeyEvent &e) {
     return true;
 }
 
-bool Canvas::handleModifierChange(const KeyEvent &e) {
+bool Canvas::handleModifierChange(const eKeyEvent &e) {
     if(mCurrentMode == CanvasMode::pointTransform) {
         if(e.fKey == Qt::Key_Alt ||
            e.fKey == Qt::Key_Shift ||
@@ -622,7 +621,7 @@ bool Canvas::handleModifierChange(const KeyEvent &e) {
     return false;
 }
 
-bool Canvas::handleTransormationInputKeyEvent(const KeyEvent &e) {
+bool Canvas::handleTransormationInputKeyEvent(const eKeyEvent &e) {
     if(mValueInput.handleTransormationInputKeyEvent(e.fKey)) {
         if(mTransMode == TransformMode::rotate) mValueInput.setupRotate();
         updateTransformation(e);
@@ -749,7 +748,7 @@ void Canvas::setParentToLastSelected() {
     }
 }
 
-bool Canvas::startRotatingAction(const KeyEvent &e) {
+bool Canvas::startRotatingAction(const eKeyEvent &e) {
     if(mCurrentMode != CanvasMode::boxTransform &&
        mCurrentMode != CanvasMode::pointTransform) return false;
     if(mSelectedBoxes.isEmpty()) return false;
@@ -770,7 +769,7 @@ bool Canvas::startRotatingAction(const KeyEvent &e) {
     return true;
 }
 
-bool Canvas::startScalingAction(const KeyEvent &e) {
+bool Canvas::startScalingAction(const eKeyEvent &e) {
     if(mCurrentMode != CanvasMode::boxTransform &&
        mCurrentMode != CanvasMode::pointTransform) return false;
 
@@ -789,7 +788,7 @@ bool Canvas::startScalingAction(const KeyEvent &e) {
     return true;
 }
 
-bool Canvas::startMovingAction(const KeyEvent &e) {
+bool Canvas::startMovingAction(const eKeyEvent &e) {
     if(mCurrentMode != CanvasMode::boxTransform &&
        mCurrentMode != CanvasMode::pointTransform) return false;
     mValueInput.clearAndDisableInput();
@@ -1018,9 +1017,10 @@ void Canvas::writeBoxOrSoundXEV(const stdsptr<XevZipFileSaver>& xevFileSaver,
     });
 }
 
-void Canvas::readBoxOrSoundXEV(ZipFileLoader &fileLoader, const QString &path,
+void Canvas::readBoxOrSoundXEV(XevReadBoxesHandler& boxReadHandler,
+                               ZipFileLoader &fileLoader, const QString &path,
                                const RuntimeIdToWriteId& objListIdConv) {
-    ContainerBox::readBoxOrSoundXEV(fileLoader, path, objListIdConv);
+    ContainerBox::readBoxOrSoundXEV(boxReadHandler, fileLoader, path, objListIdConv);
     fileLoader.process(path + "gradients.xml",
                        [&](QIODevice* const src) {
         QDomDocument doc;
@@ -1030,7 +1030,7 @@ void Canvas::readBoxOrSoundXEV(ZipFileLoader &fileLoader, const QString &path,
         for(int i = 0; i < gradients.count(); i++) {
             const auto node = gradients.at(i);
             const auto ele = node.toElement();
-            const XevImporter imp(fileLoader, objListIdConv, path);
+            const XevImporter imp(boxReadHandler, fileLoader, objListIdConv, path);
             createNewGradient()->prp_readPropertyXEV(ele, imp);
         }
     });
@@ -1111,6 +1111,14 @@ SceneBoundGradient *Canvas::getGradientWithDocumentId(const int id) const {
         if(grad->getDocumentId() == id) return grad.get();
     }
     return nullptr;
+}
+
+void Canvas::addNullObject(NullObject* const obj) {
+    mNullObjects.append(obj);
+}
+
+void Canvas::removeNullObject(NullObject* const obj) {
+    mNullObjects.removeOne(obj);
 }
 
 #include "simpletask.h"
