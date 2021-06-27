@@ -606,6 +606,51 @@ void MainWindow::setupMenuBar() {
 
     mViewMenu = mMenuBar->addMenu(tr("View", "MenuBar"));
 
+    const auto zoomMenu = mViewMenu->addMenu(
+                tr("Zoom","MenuBar_View"));
+
+    mZoomInAction = zoomMenu->addAction(tr("Zoom In", "MenuBar_View_Zoom"));
+    mZoomInAction->setShortcut(Qt::KeypadModifier + Qt::Key_Plus);
+    connect(mZoomInAction, &QAction::triggered,
+            this, [](){
+        const auto target = KeyFocusTarget::KFT_getCurrentTarget();
+        const auto cwTarget = dynamic_cast<CanvasWindow*>(target);
+        if (!cwTarget) return;
+        cwTarget->zoomInView();
+    });
+
+    mZoomOutAction = zoomMenu->addAction(tr("Zoom Out", "MenuBar_View_Zoom"));
+    mZoomOutAction->setShortcut(Qt::KeypadModifier + Qt::Key_Minus);
+    connect(mZoomOutAction, &QAction::triggered,
+            this, [](){
+        const auto target = KeyFocusTarget::KFT_getCurrentTarget();
+        const auto cwTarget = dynamic_cast<CanvasWindow*>(target);
+        if (!cwTarget) return;
+        cwTarget->zoomOutView();
+    });
+
+
+
+    mFitViewAction = zoomMenu->addAction(tr("Fit to Canvas", "MenuBar_View_Zoom"));
+    mFitViewAction->setShortcut(Qt::KeypadModifier + Qt::Key_0);
+    connect(mFitViewAction, &QAction::triggered,
+            this, [](){
+        const auto target = KeyFocusTarget::KFT_getCurrentTarget();
+        const auto cwTarget = dynamic_cast<CanvasWindow*>(target);
+        if (!cwTarget) return;
+        cwTarget->fitCanvasToSize();
+    });
+
+    mResetZoomAction = zoomMenu->addAction(tr("Reset Zoom", "MenuBar_View_Zoom"));
+    mResetZoomAction->setShortcut(Qt::KeypadModifier + Qt::Key_1);
+    connect(mResetZoomAction, &QAction::triggered,
+            this, [](){
+        const auto target = KeyFocusTarget::KFT_getCurrentTarget();
+        const auto cwTarget = dynamic_cast<CanvasWindow*>(target);
+        if (!cwTarget) return;
+        cwTarget->resetTransormation();
+    });
+
     const auto filteringMenu = mViewMenu->addMenu(
                 tr("Filtering", "MenuBar_View"));
 
@@ -740,7 +785,7 @@ void MainWindow::setupMenuBar() {
                 tr("Fill and Stroke", "MenuBar_View_Docks"));
     mFillAndStrokeDockAct->setCheckable(true);
     mFillAndStrokeDockAct->setChecked(true);
-    mFillAndStrokeDockAct->setShortcut(QKeySequence(Qt::Key_E));
+    mFillAndStrokeDockAct->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_E));
 
     connect(mFillStrokeSettingsDock, &CloseSignalingDockWidget::madeVisible,
             mFillAndStrokeDockAct, &QAction::setChecked);
@@ -751,7 +796,7 @@ void MainWindow::setupMenuBar() {
                 tr("Paint Brush", "MenuBar_View_Docks"));
     mBrushDockAction->setCheckable(true);
     mBrushDockAction->setChecked(false);
-    mBrushDockAction->setShortcut(QKeySequence(Qt::Key_B));
+    mBrushDockAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_B));
 
     connect(mBrushSettingsDock, &CloseSignalingDockWidget::madeVisible,
             mBrushDockAction, &QAction::setChecked);
@@ -898,7 +943,7 @@ void MainWindow::setupToolBar() {
     mRectangleMode = SwitchButton::sCreate2Switch(
                 "toolbarButtons/rectCreateUnchecked.png",
                 "toolbarButtons/rectCreateChecked.png",
-                gSingleLineTooltip(tr("Add Rectange Mode", "ToolBar"), "F7"), this);
+                gSingleLineTooltip(tr("Add Rectangle Mode", "ToolBar"), "F7"), this);
     mToolBar->addWidget(mRectangleMode);
 
     mTextMode = SwitchButton::sCreate2Switch(
@@ -1041,6 +1086,7 @@ void MainWindow::connectToolBarActions() {
 
     connect(mActionNewEmptyPaintFrame, &ActionButton::pressed,
             &mActions, &Actions::newEmptyPaintFrame);
+
 }
 
 MainWindow *MainWindow::sGetInstance() {
@@ -1422,6 +1468,7 @@ void MainWindow::importFile() {
     const QString fileTypes = "(*.ev *.xev *.svg " +
             FileExtensions::videoFilters() +
             FileExtensions::imageFilters() +
+            FileExtensions::layersFilters() +
             FileExtensions::soundFilters() + ")";
     const auto importPaths = eDialogs::openFiles(
                 title, defPath, fileType.arg(fileTypes));

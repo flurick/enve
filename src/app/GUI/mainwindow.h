@@ -283,6 +283,11 @@ private:
     ActionButton *mActionNewEmptyPaintFrame;
     QAction *mActionNewEmptyPaintFrameAct;
 //
+    QAction *mResetZoomAction;
+    QAction *mZoomInAction;
+    QAction *mZoomOutAction;
+    QAction *mFitViewAction;
+//
     QAction *mNoneQuality;
     QAction *mLowQuality;
     QAction *mMediumQuality;

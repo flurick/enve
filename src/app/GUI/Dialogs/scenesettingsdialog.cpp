@@ -74,7 +74,7 @@ SceneSettingsDialog::SceneSettingsDialog(const QString &name,
     mSizeLayout->addWidget(mHeightSpinBox);
     mMainLayout->addLayout(mSizeLayout);
 
-    mFrameRangeLabel = new QLabel("Frame Range:", this);
+    mFrameRangeLabel = new QLabel("Duration:", this);
     mMinFrameSpin = new QSpinBox(this);
     mMinFrameSpin->setRange(0, 999999);
     mMinFrameSpin->setValue(range.fMin);
@@ -83,10 +83,15 @@ SceneSettingsDialog::SceneSettingsDialog(const QString &name,
     mMaxFrameSpin->setRange(0, 999999);
     mMaxFrameSpin->setValue(range.fMax);
 
+    mTypeTime = new QComboBox(this);
+    mTypeTime->addItem("Frames");
+    mTypeTime->addItem("Seconds");
+
     mFrameRangeLayout = new QHBoxLayout();
     mFrameRangeLayout->addWidget(mFrameRangeLabel);
     mFrameRangeLayout->addWidget(mMinFrameSpin);
     mFrameRangeLayout->addWidget(mMaxFrameSpin);
+    mFrameRangeLayout->addWidget(mTypeTime);
 
     mMainLayout->addLayout(mFrameRangeLayout);
 
@@ -153,7 +158,17 @@ QString SceneSettingsDialog::getCanvasName() const {
 }
 
 FrameRange SceneSettingsDialog::getFrameRange() const {
-    FrameRange range = {mMinFrameSpin->value(), mMaxFrameSpin->value()};
+    FrameRange range;
+    const QString typetime = mTypeTime->currentText();
+    if(typetime == "Frames") {
+        range = {mMinFrameSpin->value(), mMaxFrameSpin->value()};
+    } else {
+        const int maxFrame = mMaxFrameSpin->value();
+        const int minFrame = mMinFrameSpin->value();
+        const qreal fpsFrame = mFPSSpinBox->value();
+        range = {qRound(minFrame*fpsFrame),
+                 qRound(maxFrame*fpsFrame)};
+    }
     range.fixOrder();
     return range;
 }
